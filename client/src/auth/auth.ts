@@ -120,7 +120,11 @@ export async function runAuth(root: HTMLElement, supa: SupabaseClient, opts: Aut
       panel.append(el("h2", "", title));
       const body = el("div", "panel-body auth-body");
       panel.append(body);
-      shell.append(hero, panel);
+      const foot = el("footer", "auth-foot");
+      const about = el("a", "", "Sobre o jogo e privacidade");
+      about.href = "/sobre.html";
+      foot.append(about);
+      shell.append(hero, panel, foot);
       return body;
     };
 

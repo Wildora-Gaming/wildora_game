@@ -1,5 +1,8 @@
-# O Caddy pega o certificado HTTPS sozinho e repassa tudo (inclusive o WebSocket) para o jogo.
+# Padrão: domínio na Cloudflare com proxy ligado (nuvem laranja) e SSL "Full (strict)".
+# A Cloudflare cuida do HTTPS para os jogadores; entre a Cloudflare e esta VM usamos o
+# certificado de origem gratuito dela (vale 15 anos), salvo em certs/origin.pem e certs/origin.key.
 {$DOMAIN} {
-	encode gzip
+	tls /certs/origin.pem /certs/origin.key
+	encode zstd gzip
 	reverse_proxy wildora:2567
 }

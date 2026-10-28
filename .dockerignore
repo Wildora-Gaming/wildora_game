@@ -7,3 +7,5 @@ server/data
 .git
 tools/**/reference
 *.log
+**/.env
+deploy/oracle/certs

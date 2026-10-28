@@ -101,3 +101,7 @@
 .auth-sep { text-align: center; font-family: system-ui, sans-serif; font-size: 13px; color: #5b6272; margin-top: 6px; }
 .auth-text { margin: 0; font-family: system-ui, sans-serif; font-size: 15px; line-height: 1.45; color: #1f2430; }
 .form-ok { color: #2c7547; font-family: system-ui, sans-serif; font-size: 14px; min-height: 1.2em; }
+
+.auth-foot { margin-top: 18px; text-align: center; font-size: 13px; }
+.auth-foot a { color: #9aa3b2; }
+.auth-foot a:hover { color: #e9ecf2; }

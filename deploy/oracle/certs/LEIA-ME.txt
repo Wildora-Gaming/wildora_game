@@ -1,0 +1,3 @@
+Coloque aqui o certificado de origem da Cloudflare (SSL/TLS → Origin Server → Create Certificate):
+  origin.pem  (Origin Certificate)
+  origin.key  (Private Key)  ← secreta, nunca vai para o GitHub

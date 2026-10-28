@@ -1,13 +1,26 @@
-# Oracle (ou qualquer VM com Docker): o jogo + Caddy na frente cuidando do HTTPS do seu domínio.
-# Uso (dentro desta pasta):  DOMAIN=jogo.seudominio.com docker compose up -d --build
+# Wildora na Oracle (ou qualquer VM com Docker).
+# O jogo vem pronto do GitHub (ghcr.io), compilado pelo GitHub Actions a cada push que passa nos testes.
+# O Caddy fica na frente com HTTPS. Configuração em .env (copie de .env.example).
+#
+#   docker compose up -d        sobe tudo
+#   ./update.sh                 baixa a versão nova (o cron do setup.sh já faz isso sozinho)
 services:
   wildora:
-    build: ../..
-    env_file: ../../.env
+    image: ghcr.io/wildora-gaming/wildora_game:latest
+    env_file: .env
     environment:
       PORT: "2567"
     restart: unless-stopped
     stop_grace_period: 20s
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:2567/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: &logs
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
   caddy:
     image: caddy:2
@@ -15,14 +28,18 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"
     environment:
-      DOMAIN: ${DOMAIN:?defina DOMAIN=jogo.seudominio.com}
+      DOMAIN: ${DOMAIN:?defina DOMAIN no .env}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Caddyfile: certificado de origem da Cloudflare (padrão)
+      # Caddyfile.letsencrypt: sem Cloudflare (ex.: DuckDNS), certificado automático
+      - ./${CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro
       - caddy_data:/data
       - caddy_config:/config
     restart: unless-stopped
+    mem_limit: 256m
+    logging: *logs
 
 volumes:
   caddy_data:

@@ -4,3 +4,6 @@ dist
 .impeccable
 server/data/
 __pycache__
+deploy/oracle/.env
+deploy/oracle/certs/*
+!deploy/oracle/certs/LEIA-ME.txt

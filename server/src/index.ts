@@ -44,7 +44,37 @@ const publicConfig = JSON.stringify(
     : { auth: "local" },
 );
 
+/**
+ * Cabeçalhos de segurança: só carrega scripts do próprio site, não deixa outro site embutir o jogo
+ * num iframe (clickjacking) e força HTTPS quando o site é servido por HTTPS.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  `connect-src 'self' ws: wss:${config.supabaseUrl ? " " + config.supabaseUrl.replace(/\/+$/, "") : ""}`,
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
+function securityHeaders(req: IncomingMessage, res: ServerResponse) {
+  res.setHeader("content-security-policy", CSP);
+  res.setHeader("x-content-type-options", "nosniff");
+  res.setHeader("referrer-policy", "strict-origin-when-cross-origin");
+  res.setHeader("x-frame-options", "DENY");
+  res.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  // atrás do Render/Caddy/Cloudflare o HTTPS chega como x-forwarded-proto
+  if (req.headers["x-forwarded-proto"] === "https") {
+    res.setHeader("strict-transport-security", "max-age=15552000");
+  }
+}
+
 function serve(req: IncomingMessage, res: ServerResponse) {
+  securityHeaders(req, res);
   const url = decodeURIComponent((req.url ?? "/").split("?")[0]);
   if (url === "/config") {
     res.writeHead(200, {
@@ -87,6 +117,14 @@ console.log(`Servidor do Wildora ouvindo na porta ${config.port}`);
 if (existsSync(join(config.clientDist, "index.html"))) console.log(`Jogo disponível em http://localhost:${config.port}`);
 console.log(`Login: ${authMode === "supabase" ? "e-mail (Supabase)" : "local (nome e senha)"}`);
 console.log(`Progresso: ${store.label} (${await store.count()} treinadores)`);
+
+// Supabase grátis pausa projetos sem atividade por 7 dias: uma consulta leve a cada 6 horas
+// mantém o banco "em uso" mesmo numa semana sem jogadores.
+if (config.databaseUrl) {
+  setInterval(() => {
+    store.count().catch((err) => console.warn("[db] consulta de manutenção falhou:", (err as Error).message));
+  }, 6 * 60 * 60 * 1000).unref();
+}
 
 // Grava tudo antes de sair (Ctrl+C ou o host desligando)
 let closing = false;

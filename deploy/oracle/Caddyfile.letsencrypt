@@ -1,0 +1,7 @@
+# Sem Cloudflare (ex.: subdomínio DuckDNS apontando direto para a VM):
+# o Caddy pega e renova sozinho um certificado gratuito do Let's Encrypt.
+# Use com CADDYFILE=Caddyfile.letsencrypt no .env.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy wildora:2567
+}

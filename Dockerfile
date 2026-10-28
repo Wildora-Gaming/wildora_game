@@ -1,6 +1,8 @@
 # Imagem única: compila o cliente e roda o servidor, que entrega o jogo e o multiplayer
 # na mesma porta. Usada na Oracle (deploy/oracle) ou em qualquer host com Docker.
 FROM node:22-slim
+LABEL org.opencontainers.image.source="https://github.com/Wildora-Gaming/wildora_game"
+LABEL org.opencontainers.image.description="Wildora: servidor do jogo + cliente compilado"
 
 WORKDIR /app
 

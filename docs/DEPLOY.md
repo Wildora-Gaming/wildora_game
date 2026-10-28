@@ -25,9 +25,9 @@ Tempo total: uns 30 minutos.
 ## 1. Supabase: projeto e tabelas
 
 1. Crie uma conta em <https://supabase.com> e clique em **New project**.
-   - **Region:** escolha **East US (North Virginia)**. Fica do lado do servidor do Render
-     (passo 4), então salvar o progresso é rápido. Quando for para a Oracle em São Paulo, dá para
-     criar o banco em São Paulo também.
+   - **Region:** o banco deve ficar perto do servidor do jogo. Indo direto para a Oracle em São Paulo
+     (recomendado, grátis e sem dormir): **South America (São Paulo)**. Usando o Render: **East US
+     (North Virginia)**.
    - Anote a **senha do banco** que você definir (vai na `DATABASE_URL`).
 2. Abra **SQL Editor → New query**, cole o conteúdo de [`supabase/schema.sql`](../supabase/schema.sql)
    e clique em **Run**. Pode rodar de novo sem medo: só cria o que falta.
@@ -134,34 +134,21 @@ Render → serviço → **Settings → Custom Domains** → adicione `jogo.seudo
 CNAME que ele mostrar no seu provedor de domínio. Depois troque a **Site URL** e as **Redirect URLs**
 do Supabase (passo 5) para o domínio novo.
 
-### Oracle Cloud (Always Free)
+### Oracle Cloud (Always Free): online de vez, sem custo
 
-Uma VM grátis que não dorme, com o [`Dockerfile`](../Dockerfile) e o Caddy cuidando do HTTPS.
+Uma VM grátis que não dorme, em São Paulo, com domínio grátis na Cloudflare. O plano completo
+(conta Oracle sem cobrança, tamanho da VM, domínio, DNS, e-mail e como evitar o aviso de "site
+perigoso" do Google) está no documento do plano. Resumo do que roda na VM:
 
-1. Crie uma VM **Ubuntu** (Ampere A1 serve) na região **Brazil East (São Paulo)**.
-2. Na **Security List** da rede (VCN), libere entrada TCP **80** e **443**. As imagens Ubuntu da Oracle
-   também bloqueiam no firewall interno; libere na VM:
-   ```bash
-   sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-   sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
-   sudo netfilter-persistent save
-   ```
-3. No seu provedor de domínio, crie um registro **A**: `jogo.seudominio.com` → IP público da VM.
-4. Na VM:
-   ```bash
-   curl -fsSL https://get.docker.com | sudo sh
-   git clone https://github.com/Wildora-Gaming/wildora_game.git && cd wildora_game
-   cp .env.example .env && nano .env        # cole SUPABASE_URL, SUPABASE_ANON_KEY e DATABASE_URL
-   cd deploy/oracle
-   sudo DOMAIN=jogo.seudominio.com docker compose up -d --build
-   ```
-   O Caddy pega o certificado HTTPS sozinho. Abra `https://jogo.seudominio.com`.
-5. Troque a **Site URL** e as **Redirect URLs** do Supabase para o domínio.
-6. Para atualizar: `git pull && sudo DOMAIN=jogo.seudominio.com docker compose up -d --build`.
+1. VM **VM.Standard.A1.Flex** com **1 OCPU e 2 GB** (Ubuntu), portas 80 e 443 liberadas na Security List.
+2. Na VM: `curl -fsSL https://raw.githubusercontent.com/Wildora-Gaming/wildora_game/main/deploy/oracle/setup.sh | bash`
+3. Preencha `~/wildora_game/deploy/oracle/.env` (domínio + Supabase) e ponha o certificado de origem da
+   Cloudflare em `deploy/oracle/certs/`.
+4. `cd ~/wildora_game/deploy/oracle && sudo docker compose up -d`
 
-Para um banco em São Paulo também: crie outro projeto Supabase na região **South America (São Paulo)**,
-rode o `schema.sql` e troque as três variáveis. As contas não migram sozinhas entre projetos, então
-faça isso antes de ter muita gente jogando.
+A imagem do jogo é gerada pelo GitHub Actions a cada push que passa nos testes
+(`ghcr.io/wildora-gaming/wildora_game`), e a VM confere a cada 5 minutos se há versão nova
+([`update.sh`](../deploy/oracle/update.sh)). Ou seja: `git push` na `main` e em poucos minutos está no ar.
 
 ---
 
