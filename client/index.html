@@ -40,6 +40,7 @@
       #hud button { pointer-events: auto; cursor: pointer; font-family: var(--pixel); font-weight: 700; color: #1f2430;
         background: #ffd84a; border: 2px solid #1f2430; }
       #hud button:hover { filter: brightness(1.07); }
+      #hud button.hud-quiet { background: #c9d2e3; }
       #hud .hud-help { margin-left: auto; font-size: 13px; }
       #night { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: #1b2a66;
         mix-blend-mode: multiply; opacity: 0; transition: opacity 4s ease; }
@@ -59,6 +60,7 @@
       <div class="hud-money" id="hud-money"></div>
       <button type="button" id="hud-team-btn">Time (T)</button>
       <button type="button" id="hud-bag-btn">Mochila (B)</button>
+      <button type="button" id="hud-logout" class="hud-quiet">Sair</button>
       <div class="hud-help">Setas/WASD andar · E interagir · Enter chat · <span id="hud-online">0</span> online <span id="hud-clock"></span></div>
     </div>
 

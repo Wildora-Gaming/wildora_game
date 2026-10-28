@@ -37,6 +37,11 @@ export interface StartOptions {
   error?: string;
   /** Tela onde a tentativa anterior foi feita */
   mode?: "login" | "register";
+  /**
+   * Só criar o personagem (conta já existe, login por e-mail): sem tela de entrada e sem senha.
+   * `onBack` é chamado pelo botão de voltar.
+   */
+  characterOnly?: { onBack: () => void; email?: string };
 }
 
 /** Guardado no navegador (sem a senha). */
@@ -187,6 +192,7 @@ export function runCreator(root: HTMLElement, opts: StartOptions = {}): Promise<
       const nameInput = textInput(name, "Seu nome");
       nameInput.addEventListener("input", () => (name = nameInput.value));
       const passInput = textInput(password, "Mínimo 4 caracteres", "password");
+      const charOnly = opts.characterOnly;
       passInput.autocomplete = "new-password";
       passInput.addEventListener("input", () => (password = passInput.value));
       const formError = el("div", "form-error");
@@ -197,7 +203,11 @@ export function runCreator(root: HTMLElement, opts: StartOptions = {}): Promise<
       const next = el("button", "btn primary", "Próximo");
       next.type = "button";
       actions.append(random, next);
-      previewBody.append(stage, field("Nome do treinador", nameInput), field("Senha", passInput), formError, actions);
+      previewBody.append(stage, field("Nome do treinador", nameInput));
+      if (charOnly) {
+        if (charOnly.email) previewBody.append(el("p", "account-line", `Conta: ${charOnly.email}`));
+      } else previewBody.append(field("Senha", passInput));
+      previewBody.append(formError, actions);
       preview.append(previewBody);
 
       // animação de caminhada na prévia
@@ -212,11 +222,12 @@ export function runCreator(root: HTMLElement, opts: StartOptions = {}): Promise<
         }
       }, 180);
 
-      const toWelcome = el("button", "btn ghost small", "Voltar");
+      const toWelcome = el("button", "btn ghost small", charOnly ? "Sair da conta" : "Voltar");
       toWelcome.type = "button";
       toWelcome.addEventListener("click", () => {
         window.clearInterval(anim);
-        showWelcome();
+        if (charOnly) charOnly.onBack();
+        else showWelcome();
       });
       head.append(toWelcome);
 
@@ -295,7 +306,7 @@ export function runCreator(root: HTMLElement, opts: StartOptions = {}): Promise<
         name = nameInput.value.trim();
         password = passInput.value;
         if (name.length < 2) return void (formError.textContent = "Escolha um nome com pelo menos 2 letras.");
-        if (password.length < 4) return void (formError.textContent = "A senha precisa ter pelo menos 4 caracteres.");
+        if (!charOnly && password.length < 4) return void (formError.textContent = "A senha precisa ter pelo menos 4 caracteres.");
         window.clearInterval(anim);
         showStep2();
       });
@@ -357,7 +368,15 @@ export function runCreator(root: HTMLElement, opts: StartOptions = {}): Promise<
       shell.append(head, panel, errorBox, footer);
     };
 
-    if (opts.mode === "register" && opts.error) showStep2(opts.error);
+    if (opts.characterOnly) {
+      // erro de nome repetido volta para o passo 1; outros erros, para o passo 2
+      if (opts.error && /nome/i.test(opts.error)) {
+        showStep1();
+        const err = shell.querySelector(".form-error");
+        if (err) err.textContent = opts.error;
+      } else if (opts.error) showStep2(opts.error);
+      else showStep1();
+    } else if (opts.mode === "register" && opts.error) showStep2(opts.error);
     else showWelcome(opts.error ?? "");
   });
 }

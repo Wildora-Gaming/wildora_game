@@ -89,3 +89,15 @@
 .creator-error { color: #ff9a9a; text-align: center; font-size: 16px; }
 .btn.small { font-size: 14px; padding: 4px 12px; margin-left: auto; }
 .creator-head { align-items: center; }
+.account-line { margin: 10px 0 0; font-family: system-ui, sans-serif; font-size: 13px; color: #5b6272; }
+
+/* Login por e-mail */
+.auth .auth-panel { width: min(440px, 100%); margin: 0 auto; }
+.auth-form, .auth-body { display: grid; gap: 12px; }
+.auth-form .btn, .auth-body .btn { width: 100%; }
+.auth-links { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; }
+.link-btn { background: none; border: 0; padding: 0; color: #2a66a0; font-family: system-ui, sans-serif; font-size: 14px;
+  text-decoration: underline; cursor: pointer; justify-self: start; }
+.auth-sep { text-align: center; font-family: system-ui, sans-serif; font-size: 13px; color: #5b6272; margin-top: 6px; }
+.auth-text { margin: 0; font-family: system-ui, sans-serif; font-size: 15px; line-height: 1.45; color: #1f2430; }
+.form-ok { color: #2c7547; font-family: system-ui, sans-serif; font-size: 14px; min-height: 1.2em; }
