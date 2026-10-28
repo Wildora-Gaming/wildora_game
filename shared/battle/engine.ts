@@ -23,6 +23,10 @@ export interface Creature {
   /** turnos restantes do estado (sono, susto) */
   statusTurns: number;
   moves: string[];
+  /** quem capturou (id do treinador), quando e onde */
+  caughtBy?: string;
+  caughtAt?: number;
+  caughtZone?: string;
 }
 
 export interface Stats {
@@ -57,9 +61,13 @@ export function movesAtLevel(speciesId: string, level: number): string[] {
 }
 
 let uidCounter = 0;
+function newUid() {
+  const c = globalThis.crypto as Crypto | undefined;
+  return c?.randomUUID ? c.randomUUID() : `c${Date.now().toString(36)}${(uidCounter++).toString(36)}`;
+}
 export function createCreature(speciesId: string, level: number, uid?: string): Creature {
   const c: Creature = {
-    uid: uid ?? `c${Date.now().toString(36)}${(uidCounter++).toString(36)}`,
+    uid: uid ?? newUid(),
     speciesId,
     level,
     xp: xpForLevel(level),

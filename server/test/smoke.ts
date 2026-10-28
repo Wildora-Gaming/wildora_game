@@ -8,7 +8,7 @@ import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { Client, type Room } from "colyseus.js";
 import { WorldRoom } from "../src/rooms/WorldRoom";
-import { Store } from "../src/store";
+import { FileStore } from "../src/store/file-store";
 import { CHAT_MAX_LENGTH, MOVE_COOLDOWN_MS, ROOM_NAME } from "../../shared/constants";
 import {
   HEAL_POINT,
@@ -98,8 +98,9 @@ async function main() {
   console.log("Servidor e clientes");
   const dir = mkdtempSync(joinPath(tmpdir(), "wildora-"));
   const dataFile = joinPath(dir, "save.json");
-  const store = new Store(dataFile);
+  const store = new FileStore(dataFile, 200);
   WorldRoom.store = store;
+  WorldRoom.local = store;
 
   assert.equal(MAP_TILES.length, MAP_WIDTH * MAP_HEIGHT);
   assert.equal(tileAt(SPAWN.x, SPAWN.y), Tile.Path);
@@ -356,8 +357,8 @@ async function main() {
   await b.leave();
   await waitFor(() => a.state.players.size === 1, "B sair");
   await a.leave();
-  await sleep(200);
-  store.flush();
+  await sleep(300);
+  await store.flush();
   const file = JSON.parse(readFileSync(dataFile, "utf8"));
   assert.equal(file.trainers.length, 2);
   assert.ok(!JSON.stringify(file).includes("senha123"), "senha não pode ser gravada em texto");
@@ -369,10 +370,11 @@ async function main() {
 
   // Nova instância do Store lendo o mesmo arquivo (simula reiniciar o servidor)
   await again.room.leave();
-  await sleep(200);
-  store.flush();
-  const reloaded = new Store(dataFile);
+  await sleep(300);
+  await store.flush();
+  const reloaded = new FileStore(dataFile);
   assert.equal(reloaded.findByName("ANA")?.team.length, saved.team);
+  assert.ok(reloaded.checkPassword(reloaded.findByName("ana")!.id, "senha123"), "senha confere depois de recarregar");
   ok("arquivo de save sobrevive a reiniciar o servidor");
 
   await gameServer.gracefullyShutdown(false);

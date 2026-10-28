@@ -1,6 +1,9 @@
 import { Room, Client, ServerError } from "@colyseus/core";
 import { Player, WorldState } from "../schema/WorldState";
-import type { Store, Trainer } from "../store";
+import { randomUUID } from "node:crypto";
+import { NameTakenError, type Store, type Trainer } from "../store/types";
+import type { FileStore } from "../store/file-store";
+import { localAuth, type AuthProvider } from "../auth";
 import {
   BATTLE_ACTION_COOLDOWN_MS,
   CHAT_COOLDOWN_MS,
@@ -48,11 +51,15 @@ import {
 } from "../../../shared/battle/engine";
 
 interface JoinOptions {
+  // modo local
   mode?: unknown;
   name?: unknown;
   password?: unknown;
   starter?: unknown;
   look?: unknown;
+  // modo Supabase
+  token?: unknown;
+  create?: { name?: unknown; look?: unknown; starter?: unknown };
 }
 
 /** Dados por conexão que não vão para o estado público. */
@@ -73,6 +80,33 @@ const PLAYER_COLORS = [0xe4572e, 0x17bebb, 0xffc914, 0x76b041, 0x9b5de5, 0xf15bb
 
 /** Contas conectadas em qualquer sala deste processo (impede login duplo). */
 const ONLINE = new Set<string>();
+/** Treinadores carregados na memória (inclui quem acabou de sair e ainda está sendo salvo). */
+const LOADED = new Map<string, Trainer>();
+
+function newTrainer(id: string, name: string, look: unknown, starterRaw: unknown): Trainer {
+  const starter = isSpeciesId(starterRaw) && STARTERS.includes(starterRaw) ? starterRaw : STARTERS[0];
+  const first = createCreature(starter, STARTER_LEVEL);
+  first.caughtBy = id;
+  first.caughtAt = Date.now();
+  first.caughtZone = "Vila Broto";
+  return {
+    id,
+    name,
+    look: sanitizeLook(look),
+    x: SPAWN.x,
+    y: SPAWN.y,
+    dir: "down",
+    money: STARTING_MONEY,
+    bag: { ...STARTING_BAG },
+    team: [first],
+    box: [],
+    dex: { seen: [starter], caught: [starter] },
+    stats: { wins: 0, caught: 0 },
+    badges: [],
+    createdAt: Date.now(),
+    lastSeen: Date.now(),
+  };
+}
 
 function cleanName(raw: unknown): string {
   const base = typeof raw === "string" ? raw : "";
@@ -83,6 +117,9 @@ export class WorldRoom extends Room<WorldState> {
   maxClients = MAX_PLAYERS_PER_ROOM;
   /** Armazenamento compartilhado por todas as salas (definido ao iniciar o servidor). */
   static store: Store;
+  /** Contas do modo local (nome + senha); só existe sem Supabase. */
+  static local: FileStore | null = null;
+  static auth: AuthProvider = localAuth;
   private sessions = new Map<string, Session>();
   private get store() {
     return WorldRoom.store;
@@ -104,7 +141,7 @@ export class WorldRoom extends Room<WorldState> {
       }
     }, 5000);
     // salvamento periódico das posições
-    this.clock.setInterval(() => this.store.markDirty(), 15000);
+    this.clock.setInterval(() => { for (const s of this.sessions.values()) this.store.markDirty(s.trainer); }, 15000);
 
     this.onMessage("move", (client, m: unknown) => this.handleMove(client, m));
     this.onMessage("chat", (client, m: unknown) => this.handleChat(client, m));
@@ -121,7 +158,37 @@ export class WorldRoom extends Room<WorldState> {
 
   // ---------- Conta ----------
 
-  onAuth(_client: Client, options: JoinOptions = {}) {
+  async onAuth(_client: Client, options: JoinOptions = {}) {
+    const trainer = WorldRoom.auth.mode === "supabase" ? await this.authSupabase(options) : await this.authLocal(options);
+    if (ONLINE.has(trainer.id)) throw new ServerError(409, "Essa conta já está conectada em outra janela.");
+    return trainer;
+  }
+
+  /** Login por e-mail (Supabase): o token vem do navegador. */
+  private async authSupabase(options: JoinOptions): Promise<Trainer> {
+    const user = await WorldRoom.auth.verify(options.token);
+    const loaded = LOADED.get(user.id) ?? (await this.store.get(user.id));
+    if (loaded) return loaded;
+    // conta nova: precisa criar o personagem
+    const create = options.create;
+    if (!create || typeof create !== "object") throw new ServerError(404, "SEM_PERSONAGEM");
+    const name = cleanName(create.name);
+    if (name.length < 2) throw new ServerError(400, "Escolha um nome com pelo menos 2 letras.");
+    if (await this.store.nameTaken(name)) throw new ServerError(409, "Esse nome já está em uso. Escolha outro.");
+    const t = newTrainer(user.id, name, create.look, create.starter);
+    try {
+      await this.store.insert(t);
+    } catch (err) {
+      if (err instanceof NameTakenError) throw new ServerError(409, err.message);
+      throw err;
+    }
+    return t;
+  }
+
+  /** Login local (desenvolvimento): nome de treinador + senha no arquivo. */
+  private async authLocal(options: JoinOptions): Promise<Trainer> {
+    const local = WorldRoom.local;
+    if (!local) throw new ServerError(500, "Login local indisponível.");
     const name = cleanName(options.name);
     const password = typeof options.password === "string" ? options.password : "";
     if (name.length < 2) throw new ServerError(400, "Escolha um nome com pelo menos 2 letras.");
@@ -130,34 +197,22 @@ export class WorldRoom extends Room<WorldState> {
     }
 
     if (options.mode === "register") {
-      if (this.store.findByName(name)) throw new ServerError(409, "Esse nome já está em uso. Escolha outro.");
-      const starter = isSpeciesId(options.starter) && STARTERS.includes(options.starter) ? options.starter : STARTERS[0];
-      const trainer = this.store.create(name, password, {
-        look: sanitizeLook(options.look),
-        x: SPAWN.x,
-        y: SPAWN.y,
-        dir: "down",
-        money: STARTING_MONEY,
-        bag: { ...STARTING_BAG },
-        team: [createCreature(starter, STARTER_LEVEL)],
-        box: [],
-        dex: { seen: [starter], caught: [starter] },
-        stats: { wins: 0, caught: 0 },
-        badges: [],
-      });
-      this.store.flush();
-      return trainer;
+      if (await local.nameTaken(name)) throw new ServerError(409, "Esse nome já está em uso. Escolha outro.");
+      const t = newTrainer(randomUUID(), name, options.look, options.starter);
+      await local.insert(t);
+      local.setPassword(t.id, password);
+      return t;
     }
 
-    const trainer = this.store.findByName(name);
-    if (!trainer || !this.store.checkPassword(trainer, password)) throw new ServerError(401, "Nome ou senha incorretos.");
-    if (ONLINE.has(trainer.id)) throw new ServerError(409, "Essa conta já está conectada em outra janela.");
-    if (options.look !== undefined) trainer.look = sanitizeLook(options.look);
-    return trainer;
+    const t = local.findByName(name);
+    if (!t || !local.checkPassword(t.id, password)) throw new ServerError(401, "Nome ou senha incorretos.");
+    if (options.look !== undefined && !ONLINE.has(t.id)) t.look = sanitizeLook(options.look);
+    return t;
   }
 
   onJoin(client: Client, _options: JoinOptions, trainer: Trainer) {
     ONLINE.add(trainer.id);
+    LOADED.set(trainer.id, trainer);
     const start = isWalkable(trainer.x, trainer.y) ? trainer : SPAWN;
     const player = Player.create(trainer.name, start.x, start.y, PLAYER_COLORS[this.state.players.size % PLAYER_COLORS.length]);
     player.look = trainer.look;
@@ -191,7 +246,17 @@ export class WorldRoom extends Room<WorldState> {
         if (c.status === "assustado") c.status = null;
       }
       ONLINE.delete(s.trainer.id);
-      this.store.markDirty();
+      // grava já e só então solta da memória (se não voltou nesse meio tempo)
+      const t = s.trainer;
+      void this.store
+        .save(t)
+        .catch((err) => {
+          console.error(`[store] falha ao salvar ${t.name} na saída:`, err);
+          this.store.markDirty(t);
+        })
+        .finally(() => {
+          if (!ONLINE.has(t.id)) LOADED.delete(t.id);
+        });
     }
     this.state.players.delete(client.sessionId);
     this.sessions.delete(client.sessionId);
@@ -199,7 +264,7 @@ export class WorldRoom extends Room<WorldState> {
   }
 
   onDispose() {
-    this.store?.flush();
+    void this.store?.flush();
   }
 
   private sendProfile(client: Client) {
@@ -337,6 +402,9 @@ export class WorldRoom extends Room<WorldState> {
         const caught = battle.foe;
         caught.status = null;
         caught.statusTurns = 0;
+        caught.caughtBy = t.id;
+        caught.caughtAt = Date.now();
+        caught.caughtZone = s.battleZone;
         const name = getSpecies(caught.speciesId).name;
         if (t.team.length < TEAM_MAX) {
           t.team.push(caught);
@@ -389,7 +457,7 @@ export class WorldRoom extends Room<WorldState> {
     if (over) {
       s.battle = null;
       player.inBattle = false;
-      this.store.markDirty();
+      this.store.markDirty(t);
       this.sendProfile(client);
       next?.();
     }
@@ -476,7 +544,7 @@ export class WorldRoom extends Room<WorldState> {
           }
         : { title: gym.name, text: `Você venceu ${gym.leader.name} de novo! Já tinha a ${gym.badge}.` };
       client.send("dialog", msg);
-      this.store.markDirty();
+      this.store.markDirty(t);
       this.sendProfile(client);
     };
   }
@@ -510,7 +578,7 @@ export class WorldRoom extends Room<WorldState> {
       void tx;
       if (obj.role === "heal") {
         for (const c of s.trainer.team) healFully(c);
-        this.store.markDirty();
+        this.store.markDirty(s.trainer);
         this.sendProfile(client);
         dialog("Centro de Cura", "Seu time foi totalmente recuperado. Volte sempre que precisar!");
       } else {
@@ -558,7 +626,7 @@ export class WorldRoom extends Room<WorldState> {
     if (t.money < cost) return this.notice(client, "Sementes insuficientes.");
     t.money -= cost;
     t.bag[item.id] = (t.bag[item.id] ?? 0) + qty;
-    this.store.markDirty();
+    this.store.markDirty(t);
     this.sendProfile(client);
     this.notice(client, `Você comprou ${qty}× ${item.name}.`);
   }
@@ -586,7 +654,7 @@ export class WorldRoom extends Room<WorldState> {
     c.hp = Math.min(max, c.hp + item.power);
     t.bag[item.id] -= 1;
     if (t.bag[item.id] <= 0) delete t.bag[item.id];
-    this.store.markDirty();
+    this.store.markDirty(t);
     this.sendProfile(client);
     this.notice(client, `${getSpecies(c.speciesId).name} recuperou Vida.`);
   }
@@ -602,7 +670,7 @@ export class WorldRoom extends Room<WorldState> {
     if (!ok(from) || !ok(to) || from === to) return;
     const [c] = team.splice(from, 1);
     team.splice(to, 0, c);
-    this.store.markDirty();
+    this.store.markDirty(r.s.trainer);
     this.sendProfile(client);
   }
 
@@ -620,7 +688,7 @@ export class WorldRoom extends Room<WorldState> {
       if (t.team.length >= TEAM_MAX) return this.notice(client, `O time já tem ${TEAM_MAX} criaturas.`);
       t.team.push(...t.box.splice(index, 1));
     }
-    this.store.markDirty();
+    this.store.markDirty(t);
     this.sendProfile(client);
   }
 
