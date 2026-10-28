@@ -23,12 +23,18 @@ export interface MapObject {
   h: number;
   /** variação visual (cor do telhado etc.) */
   variant: number;
+  /** função especial: Centro de Cura, Loja */
+  role?: "heal" | "shop";
+  /** texto das placas */
+  text?: string;
 }
 
 export const MAP_WIDTH = 96;
 export const MAP_HEIGHT = 72;
 
 export const SPAWN = { x: 47, y: 37 };
+/** Em frente à porta do Centro de Cura: onde o jogador volta após perder. */
+export const HEAL_POINT = { x: 43, y: 29 };
 
 /** Tamanho da área bloqueada de cada objeto. */
 const FOOTPRINT: Record<ObjectKind, [number, number]> = {
@@ -132,23 +138,29 @@ function buildWorld() {
       for (let i = x - d; i < x + w + d; i++) if (inside(i, j) && get(i, j) === Tile.Path) return true;
     return false;
   };
-  const place = (kind: ObjectKind, x: number, y: number, variant = 0, force = false) => {
+  const place = (kind: ObjectKind, x: number, y: number, variant = 0, force = false, extra: Partial<MapObject> = {}) => {
     const [w, h] = FOOTPRINT[kind];
     if (!force && !free(x, y, w, h)) return false;
-    objects.push({ kind, x, y, w, h, variant });
+    objects.push({ kind, x, y, w, h, variant, ...extra });
     for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (inside(i, j)) blocked[j * W + i] = true;
     return true;
   };
 
   // --- Vila Broto: casas ao redor da praça (porta virada para a estrada) ---
-  place("house", 41, 26, 0, true);
-  place("house", 50, 26, 1, true);
+  rect(43, 29, 1, 2, Tile.Path); // trilha até a porta do Centro de Cura
+  rect(52, 29, 1, 2, Tile.Path); // trilha até a porta da Loja
+  place("house", 41, 26, 0, true, { role: "heal" });
+  place("house", 50, 26, 1, true, { role: "shop" });
   place("house", 41, 44, 2, true);
   place("house", 50, 44, 3, true);
   place("house", 33, 31, 1, true);
   place("well", 47, 34 - 1, 0, true);
   for (const [x, y] of [[40, 31], [55, 31], [40, 42], [55, 42]]) place("lamp", x, y, 0, true);
-  place("sign", 46, 39, 0, true);
+  place("sign", 46, 39, 0, true, {
+    text: "Vila Broto. Centro de Cura: casa de telhado vermelho. Loja: telhado azul. A grama alta das campinas esconde criaturas selvagens!",
+  });
+  place("sign", 22, 34, 0, true, { text: "Campina Norte, subindo a trilha. Orla do Bosque ao sul." });
+  place("sign", 64, 34, 0, true, { text: "Campos do Leste e Lago Espelho ao norte. Pradaria Sul descendo a estrada." });
   // cercas dos quintais
   for (let i = 0; i < 6; i++) {
     place("fence", 35 + i, 29, 0, true);
@@ -223,6 +235,16 @@ export function tileAt(x: number, y: number): Tile {
 export function isWalkable(x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) return false;
   return !BLOCKED[y * MAP_WIDTH + x];
+}
+
+/** Objeto que ocupa um tile (ou undefined). */
+export function objectAt(x: number, y: number): MapObject | undefined {
+  return MAP_OBJECTS.find((o) => x >= o.x && x < o.x + o.w && y >= o.y && y < o.y + o.h);
+}
+
+/** Tile da porta de uma casa (linha de baixo, coluna do meio). */
+export function doorOf(o: MapObject) {
+  return { x: o.x + 2, y: o.y + o.h - 1 };
 }
 
 /** Caminho mais curto (BFS) até o primeiro tile que satisfaz `goal`. Lista de passos, sem a origem. */

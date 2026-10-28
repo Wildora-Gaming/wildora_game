@@ -46,22 +46,56 @@ export interface ChatBroadcast {
   system?: boolean;
 }
 
-// Batalha (servidor → cliente). Os tipos vêm do motor em shared/battle.
+// ---------------- Regras de conta e progresso ----------------
+
+export const PASSWORD_MIN_LENGTH = 4;
+export const TEAM_MAX = 6;
+
+/** Ciclo dia/noite: duração total e quanto dela é noite (ms). */
+export const DAY_CYCLE_MS = 20 * 60 * 1000;
+export const NIGHT_MS = 6 * 60 * 1000;
+
+export function isNightAt(time: number) {
+  return time % DAY_CYCLE_MS >= DAY_CYCLE_MS - NIGHT_MS;
+}
+
+// ---------------- Mensagens servidor → cliente ----------------
 
 /** Intervalo mínimo entre duas ações de batalha (ms). */
 export const BATTLE_ACTION_COOLDOWN_MS = 300;
 
-export interface TeamMessage {
+export interface ProfileMessage {
+  name: string;
+  money: number;
+  bag: Record<string, number>;
   team: CreatureView[];
+  box: CreatureView[];
+  dex: { seen: number; caught: number };
 }
 export interface BattleStartMessage {
   wild: boolean;
-  player: CreatureView;
+  team: CreatureView[];
+  active: number;
   foe: CreatureView;
+  zone: string;
 }
 export interface BattleTurnMessage {
   events: BattleEvent[];
-  player: CreatureView;
+  team: CreatureView[];
+  active: number;
   foe: CreatureView;
   over: boolean;
+  needSwitch: boolean;
+  bag: Record<string, number>;
+}
+export interface DialogMessage {
+  title: string;
+  text: string;
+}
+export interface ShopMessage {
+  items: { id: string; name: string; description: string; price: number }[];
+  money: number;
+}
+export interface NoticeMessage {
+  text: string;
 }

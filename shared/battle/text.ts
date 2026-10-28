@@ -1,5 +1,6 @@
 // Texto dos eventos de batalha, usado pelo cliente.
-import { getMove } from "./data";
+import { getMove, getSpecies } from "./data";
+import { getItem } from "../items";
 import type { BattleEvent, Side } from "./engine";
 
 export interface BattleNames {
@@ -63,13 +64,31 @@ export function describeEvent(e: BattleEvent, names: BattleNames, wild = true): 
       return `${who(e.side)} desmaiou!`;
     case "run":
       return e.ok ? "Você fugiu em segurança!" : "Não conseguiu fugir!";
+    case "switch":
+      return `Vai, ${e.view.name}!`;
+    case "heal":
+      return `${e.amount > 0 ? `Recuperou ${e.amount} de Vida.` : "Não teve efeito."}`;
+    case "throw":
+      return `Você lançou ${getItem(e.itemId)?.name ?? "um Orbi"}!`;
+    case "shake":
+      return e.count > 0 ? `${"...".repeat(e.count)}` : null;
+    case "caught":
+      return `Peguei! ${getSpecies(e.speciesId).name} foi capturado!`;
+    case "escape":
+      return `Ah! ${names.foe} escapou!`;
+    case "sent":
+      return e.where === "team" ? `${e.name} entrou para o seu time.` : `Seu time está cheio: ${e.name} foi para a caixa.`;
     case "xp":
-      return `${names.player} ganhou ${e.amount} de XP!`;
+      return `${e.name} ganhou ${e.amount} de XP!`;
     case "level":
-      return `${names.player} subiu para o nível ${e.level}!`;
+      return `${e.name} subiu para o nível ${e.level}!`;
     case "learn":
-      return `${names.player} aprendeu ${getMove(e.moveId).name}!`;
+      return `${e.name} aprendeu ${getMove(e.moveId).name}!`;
+    case "evolve":
+      return `O quê? ${getSpecies(e.from).name} evoluiu para ${getSpecies(e.to).name}!`;
+    case "money":
+      return `Você ganhou ${e.amount} Sementes.`;
     case "end":
-      return e.result === "lose" ? "Você correu de volta para a Vila Broto para recuperar o time." : null;
+      return e.result === "lose" ? "Você correu de volta para o Centro de Cura da Vila Broto." : null;
   }
 }
