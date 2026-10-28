@@ -14,6 +14,8 @@ export class Player extends Schema {
   declare inBattle: boolean;
   /** Aparência na forma compacta (ver shared/avatar/look.ts) */
   declare look: string;
+  /** último pedido de movimento processado (o cliente usa para confirmar a previsão) */
+  declare seq: number;
 
   constructor() {
     super();
@@ -24,6 +26,7 @@ export class Player extends Schema {
     this.color = 0xffffff;
     this.inBattle = false;
     this.look = "";
+    this.seq = 0;
   }
 
   static create(name: string, x: number, y: number, color: number) {
@@ -43,6 +46,7 @@ defineTypes(Player, {
   color: "uint32",
   inBattle: "boolean",
   look: "string",
+  seq: "uint32",
 });
 
 export class WorldState extends Schema {

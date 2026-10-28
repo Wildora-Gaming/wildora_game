@@ -65,8 +65,10 @@ Para testar a noite sem esperar: `WILDORA_TIME_OFFSET=<ms> npm run dev` adianta 
 
 ## Arte
 
-- **Criaturas:** PNGs em `client/public/sprites/`, recortados da folha de referência. Para trocar,
-  substitua o arquivo com o mesmo nome (detalhes em `client/public/sprites/LEIA-ME.md`).
+- **Criaturas:** pixel art de verdade, desenhada pixel a pixel pelo jogo a partir de
+  `client/src/creatures/pixels.json`, sempre em escala inteira (sem borrão). O JSON é gerado por
+  `tools/creatures/pixelize.py`, usando a folha de arte só como referência de forma e cor
+  (detalhes em `tools/creatures/LEIA-ME.md`).
 - **Personagem:** pixel art 16x24 montada por camadas. Os moldes ficam em `tools/avatar/parts.py`;
   depois de editar, rode `python3 tools/avatar/parts.py` para gerar `shared/avatar/parts.json` e
   `python3 tools/avatar/preview.py previa.png` para ver o resultado.
@@ -100,6 +102,7 @@ client/
   src/world/art.ts         tileset e objetos em pixel art
   src/avatar/sheet.ts      folha de sprites do personagem para o Phaser
 tools/avatar/              moldes do personagem e prévia
+tools/creatures/           gerador da pixel art das criaturas (referências + script)
 ```
 
 ## Decisões de arquitetura
@@ -107,6 +110,10 @@ tools/avatar/              moldes do personagem e prévia
 - **Servidor é a autoridade.** O cliente só envia intenções (`move`, `battle_action`, `buy`...).
   Movimento, encontros, dano, sorteios, captura, XP, compras e mochila são validados no
   servidor; o resto é ignorado.
+- **Movimento com previsão no cliente.** O seu personagem anda no mesmo quadro em que a tecla é
+  apertada; cada passo leva um número (`seq`) e o servidor confirma ou corrige. O servidor limita
+  a velocidade com um balde de passos (aceita pequenas rajadas da rede). Os outros jogadores
+  andam por uma fila de tiles em velocidade constante, sem trancos.
 - **Motor de batalha puro** (`shared/battle/engine.ts`): sem rede e com RNG injetado, testado
   isoladamente. O PvE roda dentro da sala do mundo; o PvP vai usar o mesmo motor numa sala própria.
 - **Salvamento em arquivo** com escrita atômica: zero instalação. A interface `Store` é pequena

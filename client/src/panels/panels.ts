@@ -95,7 +95,7 @@ export function hpBar(hp: number, max: number) {
 
 export function creatureRow(c: CreatureView, actions: HTMLElement[] = [], compact = false) {
   const row = el("div", `c-row${c.hp <= 0 ? " fainted" : ""}`);
-  const art = creatureArt(c.speciesId, c.name, c.types);
+  const art = creatureArt(c.speciesId, c.name, c.types, { box: 64 });
   art.classList.add("c-art");
   const info = el("div", "c-info");
   const top = el("div", "c-top");

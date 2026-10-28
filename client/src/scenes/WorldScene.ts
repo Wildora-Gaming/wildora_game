@@ -1,8 +1,8 @@
 import Phaser from "phaser";
 import { getStateCallbacks, type Room } from "colyseus.js";
-import { MOVE_COOLDOWN_MS, TILE_SIZE, type ChatBroadcast, type Direction } from "../../../shared/constants";
-import { MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH, Tile, tileAt } from "../../../shared/map";
-import { inputBlocked, uiState } from "../ui-state";
+import { MOVE_COOLDOWN_MS, TILE_SIZE, DIRECTION_DELTA, type ChatBroadcast, type Direction } from "../../../shared/constants";
+import { MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH, Tile, isWalkable, tileAt } from "../../../shared/map";
+import { inputBlocked } from "../ui-state";
 import { openBagPanel, openTeamPanel } from "../panels/panels";
 import { areaName } from "../../../shared/creatures";
 import { grassOverlay, objectArt, objectKey, renderGround } from "../world/art";
@@ -12,23 +12,50 @@ import { toast } from "../toast";
 /** Zoom da câmera: cada pixel da arte vira um bloco de N pixels na tela. */
 export const WORLD_ZOOM = 3;
 
-interface PlayerView {
+/**
+ * Tempo de um passo no cliente. Um pouco acima do limite do servidor para nunca
+ * esbarrar nele; o servidor ainda aceita pequenas rajadas causadas pela rede.
+ */
+const STEP_MS = MOVE_COOLDOWN_MS + 6;
+
+/** Personagem desenhado no mundo, com o movimento de um tile para o outro. */
+interface Mover {
   body: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite;
   battleIcon: Phaser.GameObjects.Container;
-  /** moitas na frente das pernas quando está na grama alta */
   grass: Phaser.GameObjects.Image;
   textureKey: string;
   dir: Direction;
-  lastMoveAt: number;
-  walking: boolean;
+  /** tile atual (destino do passo em andamento) */
+  tx: number;
+  ty: number;
+  fromX: number;
+  fromY: number;
+  moving: boolean;
+  progress: number;
+  /** quando parou de andar (para não piscar o quadro parado entre passos) */
+  idleSince: number;
+  /** jogadores remotos: próximos tiles a percorrer */
+  queue: { x: number; y: number }[];
 }
 
+const px = (t: number) => t * TILE_SIZE + TILE_SIZE / 2;
+const py = (t: number) => (t + 1) * TILE_SIZE;
+
 export class WorldScene extends Phaser.Scene {
-  private views = new Map<string, PlayerView>();
-  private keys!: Record<"up" | "down" | "left" | "right" | "w" | "a" | "s" | "d", Phaser.Input.Keyboard.Key>;
-  private lastMoveSent = 0;
+  private movers = new Map<string, Mover>();
+  private me: Mover | null = null;
   private area = "";
+
+  // movimento previsto do jogador local
+  private seq = 0;
+  private pending: { seq: number; x: number; y: number }[] = [];
+  private bumped: Direction | null = null;
+
+  /** direções seguradas, na ordem em que foram apertadas (a última vence) */
+  private held: Direction[] = [];
+  /** toque rápido durante um passo: executado assim que o passo termina */
+  private buffered: Direction | null = null;
 
   constructor(private room: Room) {
     super("world");
@@ -47,21 +74,17 @@ export class WorldScene extends Phaser.Scene {
     cam.setBackgroundColor("#2f6b35");
   }
 
-  update(time: number) {
-    for (const v of this.views.values()) {
-      v.body.setDepth(v.body.y);
-      if (v.walking && time - v.lastMoveAt > MOVE_COOLDOWN_MS + 70) {
-        v.walking = false;
-        v.sprite.stop();
-        v.sprite.setFrame(frameIndex(v.dir, "stand"));
-      }
-    }
+  private lastFrame = 0;
 
-    if (inputBlocked()) return;
-    const dir = this.heldDirection();
-    if (dir && time - this.lastMoveSent >= MOVE_COOLDOWN_MS) {
-      this.lastMoveSent = time;
-      this.room.send("move", { dir });
+  update(time: number) {
+    // Tempo real entre quadros: o delta do Phaser é suavizado e fica lento em máquinas fracas.
+    const now = performance.now();
+    const dt = this.lastFrame ? Math.min(now - this.lastFrame, 250) : 0;
+    this.lastFrame = now;
+    for (const m of this.movers.values()) {
+      if (m === this.me) this.stepLocal(m, dt, time);
+      else this.stepRemote(m, dt, time);
+      m.body.setDepth(m.body.y);
     }
   }
 
@@ -80,6 +103,128 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  // ---------- Movimento ----------
+
+  private heldDirection(): Direction | null {
+    return this.held.at(-1) ?? null;
+  }
+
+  /** Avança a animação de um passo; devolve o tempo que sobrou ao chegar (para emendar o próximo). */
+  private advance(m: Mover, ms: number): number {
+    if (!m.moving) return ms;
+    m.progress += ms / STEP_MS;
+    if (m.progress < 1) {
+      m.body.setPosition(m.fromX + (px(m.tx) - m.fromX) * m.progress, m.fromY + (py(m.ty) - m.fromY) * m.progress);
+      return 0;
+    }
+    const left = (m.progress - 1) * STEP_MS;
+    m.moving = false;
+    m.progress = 0;
+    m.body.setPosition(px(m.tx), py(m.ty));
+    this.arrived(m);
+    return left;
+  }
+
+  private startStep(m: Mover, x: number, y: number, dir: Direction, carry: number) {
+    m.fromX = m.body.x;
+    m.fromY = m.body.y;
+    m.tx = x;
+    m.ty = y;
+    m.dir = dir;
+    m.moving = true;
+    m.progress = 0;
+    m.grass.setVisible(false);
+    const anim = `${m.textureKey}:walk-${dir}`;
+    if (m.sprite.anims.currentAnim?.key !== anim || !m.sprite.anims.isPlaying) m.sprite.play(anim, true);
+    if (carry > 0) this.advance(m, carry);
+  }
+
+  private arrived(m: Mover) {
+    m.grass.setVisible(tileAt(m.tx, m.ty) === Tile.TallGrass);
+    if (m === this.me) this.updateArea(m.tx, m.ty);
+  }
+
+  private idle(m: Mover, time: number) {
+    if (m.idleSince === 0) m.idleSince = time;
+    // pequena tolerância: entre dois passos seguidos não volta para o quadro parado
+    if (time - m.idleSince > 40 && m.sprite.anims.isPlaying) {
+      m.sprite.stop();
+      m.sprite.setFrame(frameIndex(m.dir, "stand"));
+    }
+  }
+
+  private face(m: Mover, dir: Direction) {
+    if (m.dir === dir) return;
+    m.dir = dir;
+    if (!m.moving) m.sprite.setFrame(frameIndex(dir, "stand"));
+  }
+
+  /** Jogador local: anda na hora e avisa o servidor (que confere e corrige se precisar). */
+  private stepLocal(m: Mover, dt: number, time: number) {
+    const carry = this.advance(m, dt);
+    if (m.moving) return;
+
+    const dir = inputBlocked() ? null : this.heldDirection() ?? this.buffered;
+    this.buffered = null;
+    if (!dir) {
+      this.bumped = null;
+      this.idle(m, time);
+      return;
+    }
+
+    const { dx, dy } = DIRECTION_DELTA[dir];
+    const nx = m.tx + dx;
+    const ny = m.ty + dy;
+    if (isWalkable(nx, ny)) {
+      this.sendMove(dir, nx, ny);
+      m.idleSince = 0;
+      this.bumped = null;
+      this.startStep(m, nx, ny, dir, carry);
+    } else {
+      // bloqueado: vira para o obstáculo e avisa uma vez (abre portas da vila)
+      this.face(m, dir);
+      this.idle(m, time);
+      if (this.bumped !== dir) {
+        this.bumped = dir;
+        this.sendMove(dir, m.tx, m.ty);
+      }
+    }
+  }
+
+  private sendMove(dir: Direction, x: number, y: number) {
+    this.seq += 1;
+    this.pending.push({ seq: this.seq, x, y });
+    this.room.send("move", { dir, seq: this.seq });
+  }
+
+  /** Jogadores remotos: percorrem a fila de tiles em velocidade constante (mais rápido se atrasar). */
+  private stepRemote(m: Mover, dt: number, time: number) {
+    // fila cheia: acelera para alcançar; fila vazia: desacelera um pouco para o próximo passo chegar a tempo
+    let left = dt * (m.queue.length >= 2 ? 1.5 : m.queue.length === 1 ? 1 : 0.85);
+    for (let i = 0; i < 4; i++) {
+      left = this.advance(m, left);
+      if (m.moving) return;
+      const next = m.queue.shift();
+      if (!next) break;
+      const dir: Direction = next.x > m.tx ? "right" : next.x < m.tx ? "left" : next.y > m.ty ? "down" : "up";
+      m.idleSince = 0;
+      this.startStep(m, next.x, next.y, dir, 0);
+    }
+    if (!m.moving) this.idle(m, time);
+  }
+
+  private teleport(m: Mover, x: number, y: number) {
+    m.moving = false;
+    m.progress = 0;
+    m.queue = [];
+    m.tx = x;
+    m.ty = y;
+    m.body.setPosition(px(x), py(y));
+    m.sprite.stop();
+    m.sprite.setFrame(frameIndex(m.dir, "stand"));
+    this.arrived(m);
+  }
+
   // ---------- Rede ----------
 
   private bindRoom() {
@@ -87,22 +232,30 @@ export class WorldScene extends Phaser.Scene {
     const online = document.getElementById("hud-online");
 
     $(this.room.state).players.onAdd((player: any, sessionId: string) => {
-      const view = this.createPlayerView(player, sessionId === this.room.sessionId);
-      this.views.set(sessionId, view);
-      if (online) online.textContent = String(this.room.state.players.size);
-
       const isMe = sessionId === this.room.sessionId;
-      $(player).onChange(() => this.syncPlayer(view, player, isMe));
-      if (isMe) this.updateArea(player.x, player.y);
+      const m = this.createMover(player, isMe);
+      this.movers.set(sessionId, m);
+      if (isMe) {
+        this.me = m;
+        this.seq = player.seq ?? 0;
+        this.updateArea(player.x, player.y);
+      }
+      if (online) online.textContent = String(this.room.state.players.size);
+      $(player).onChange(() => (isMe ? this.syncMe(m, player) : this.syncRemote(m, player)));
     });
 
     $(this.room.state).players.onRemove((_player: any, sessionId: string) => {
-      this.views.get(sessionId)?.body.destroy();
-      this.views.delete(sessionId);
+      this.movers.get(sessionId)?.body.destroy();
+      this.movers.delete(sessionId);
       if (online) online.textContent = String(this.room.state.players.size);
     });
 
     this.room.onLeave(() => toast("Conexão perdida. Recarregue a página.", 0));
+
+    // Batalha começou: descarta passos previstos que o servidor vai recusar
+    this.room.onMessage("battle_start", () => {
+      this.held = [];
+    });
 
     // Dia e noite
     const night = document.getElementById("night");
@@ -113,45 +266,49 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private syncPlayer(view: PlayerView, player: any, isMe = false) {
-    view.battleIcon.setVisible(Boolean(player.inBattle));
-    view.grass.setVisible(tileAt(player.x, player.y) === Tile.TallGrass);
-    if (isMe) this.updateArea(player.x, player.y);
-
+  private syncLook(m: Mover, player: any) {
+    m.battleIcon.setVisible(Boolean(player.inBattle));
     if (player.look) {
       const key = ensureAvatar(this, player.look);
-      if (key !== view.textureKey) {
-        view.textureKey = key;
-        view.sprite.setTexture(key, frameIndex(view.dir, "stand"));
+      if (key !== m.textureKey) {
+        m.textureKey = key;
+        m.sprite.setTexture(key, frameIndex(m.dir, "stand"));
       }
     }
+  }
 
-    const dir = (player.dir as Direction) ?? "down";
-    const tx = player.x * TILE_SIZE + TILE_SIZE / 2;
-    const ty = (player.y + 1) * TILE_SIZE;
-    const dist = Math.abs(tx - view.body.x) + Math.abs(ty - view.body.y);
+  /** Confere a posição prevista com a confirmada pelo servidor. */
+  private syncMe(m: Mover, player: any) {
+    this.syncLook(m, player);
+    const acked: number = player.seq ?? 0;
+    let expected: { x: number; y: number } | undefined;
+    while (this.pending.length && this.pending[0].seq <= acked) expected = this.pending.shift();
 
+    if (expected) {
+      if (expected.x !== player.x || expected.y !== player.y) this.correct(m, player.x, player.y);
+    } else if (!this.pending.length && (m.tx !== player.x || m.ty !== player.y)) {
+      // mudou sem pedido nosso (ex.: voltou ao Centro de Cura depois de perder)
+      this.correct(m, player.x, player.y);
+    }
+  }
+
+  private correct(m: Mover, x: number, y: number) {
+    this.pending = [];
+    this.teleport(m, x, y);
+  }
+
+  private syncRemote(m: Mover, player: any) {
+    this.syncLook(m, player);
+    const last = m.queue.at(-1) ?? { x: m.tx, y: m.ty };
+    const dist = Math.abs(player.x - last.x) + Math.abs(player.y - last.y);
     if (dist === 0) {
-      // só virou de lado (ou bateu num obstáculo)
-      if (dir !== view.dir) {
-        view.dir = dir;
-        if (!view.walking) view.sprite.setFrame(frameIndex(dir, "stand"));
-      }
-      return;
+      if (!m.moving && !m.queue.length) this.face(m, player.dir);
+    } else if (dist === 1 && m.queue.length < 6) {
+      m.queue.push({ x: player.x, y: player.y });
+    } else {
+      m.dir = player.dir;
+      this.teleport(m, player.x, player.y);
     }
-
-    view.dir = dir;
-    this.tweens.killTweensOf(view.body);
-    if (dist > TILE_SIZE * 1.5) {
-      view.body.setPosition(tx, ty); // teleporte (ex.: voltou à vila após derrota)
-      view.sprite.setFrame(frameIndex(dir, "stand"));
-      return;
-    }
-    this.tweens.add({ targets: view.body, x: tx, y: ty, duration: MOVE_COOLDOWN_MS, ease: "Linear" });
-    view.lastMoveAt = this.time.now;
-    const anim = `${view.textureKey}:walk-${dir}`;
-    if (!view.walking || view.sprite.anims.currentAnim?.key !== anim) view.sprite.play(anim, true);
-    view.walking = true;
   }
 
   private updateArea(x: number, y: number) {
@@ -164,7 +321,7 @@ export class WorldScene extends Phaser.Scene {
     if (!first) toast(name, 1800);
   }
 
-  private createPlayerView(player: any, isMe: boolean): PlayerView {
+  private createMover(player: any, isMe: boolean): Mover {
     const textureKey = ensureAvatar(this, player.look || "");
     const dir = (player.dir as Direction) ?? "down";
     const shadow = this.add.ellipse(0, -1, 12, 4, 0x000000, 0.22);
@@ -189,59 +346,80 @@ export class WorldScene extends Phaser.Scene {
       .setScale(1 / WORLD_ZOOM);
     const battleIcon = this.add.container(9, -24, [bubble, mark]).setVisible(Boolean(player.inBattle));
 
-    const x = player.x * TILE_SIZE + TILE_SIZE / 2;
-    const y = (player.y + 1) * TILE_SIZE;
     if (!this.textures.exists("grass-overlay")) this.textures.addCanvas("grass-overlay", grassOverlay());
     const grass = this.add.image(0, 0, "grass-overlay").setOrigin(0.5, 1);
     grass.setVisible(tileAt(player.x, player.y) === Tile.TallGrass);
-    const body = this.add.container(x, y, [shadow, sprite, grass, label, battleIcon]).setDepth(y);
+    const body = this.add.container(px(player.x), py(player.y), [shadow, sprite, grass, label, battleIcon]);
+    body.setDepth(body.y);
 
-    if (isMe) this.cameras.main.startFollow(body, true, 0.2, 0.2, 0, 12);
-    return { body, sprite, battleIcon, grass, textureKey, dir, lastMoveAt: 0, walking: false };
+    // câmera presa no personagem, sem atraso
+    if (isMe) this.cameras.main.startFollow(body, true, 1, 1, 0, 12);
+    return {
+      body,
+      sprite,
+      battleIcon,
+      grass,
+      textureKey,
+      dir,
+      tx: player.x,
+      ty: player.y,
+      fromX: body.x,
+      fromY: body.y,
+      moving: false,
+      progress: 0,
+      idleSince: 0,
+      queue: [],
+    };
   }
 
   // ---------- Entrada ----------
 
   private setupInput() {
-    const kb = this.input.keyboard!;
-    // Teclas de ação (só quando nada está aberto e ninguém está digitando)
+    const KEYS: Record<string, Direction> = {
+      arrowup: "up",
+      w: "up",
+      arrowdown: "down",
+      s: "down",
+      arrowleft: "left",
+      a: "left",
+      arrowright: "right",
+      d: "right",
+    };
+
     window.addEventListener("keydown", (e) => {
-      if (inputBlocked() || e.repeat) return;
       const k = e.key.toLowerCase();
+      const dir = KEYS[k];
+      if (dir) {
+        if (inputBlocked()) return;
+        if (k.startsWith("arrow")) e.preventDefault();
+        this.held = this.held.filter((d) => d !== dir);
+        this.held.push(dir);
+        if (!e.repeat && this.me?.moving) this.buffered = dir;
+        return;
+      }
+      if (inputBlocked() || e.repeat) return;
       if (k === "e" || k === " ") {
         e.preventDefault();
         this.room.send("interact");
       } else if (k === "t") {
+        this.held = [];
         openTeamPanel(this.room);
       } else if (k === "b" || k === "i") {
+        this.held = [];
         openBagPanel(this.room);
       }
     });
-    const C = Phaser.Input.Keyboard.KeyCodes;
-    // enableCapture=false para não "roubar" as teclas do campo de chat.
-    this.keys = {
-      up: kb.addKey(C.UP, false),
-      down: kb.addKey(C.DOWN, false),
-      left: kb.addKey(C.LEFT, false),
-      right: kb.addKey(C.RIGHT, false),
-      w: kb.addKey(C.W, false),
-      a: kb.addKey(C.A, false),
-      s: kb.addKey(C.S, false),
-      d: kb.addKey(C.D, false),
+    window.addEventListener("keyup", (e) => {
+      const dir = KEYS[e.key.toLowerCase()];
+      if (dir) this.held = this.held.filter((d) => d !== dir);
+    });
+    // soltar tudo ao trocar de janela (senão o personagem segue andando sozinho)
+    const release = () => {
+      this.held = [];
+      this.buffered = null;
     };
-  }
-
-  private heldDirection(): Direction | null {
-    const k = this.keys;
-    if (k.up.isDown || k.w.isDown) return "up";
-    if (k.down.isDown || k.s.isDown) return "down";
-    if (k.left.isDown || k.a.isDown) return "left";
-    if (k.right.isDown || k.d.isDown) return "right";
-    return null;
-  }
-
-  private isTyping() {
-    return document.activeElement?.id === "chat-input";
+    window.addEventListener("blur", release);
+    document.addEventListener("visibilitychange", release);
   }
 
   // ---------- Chat ----------
@@ -267,7 +445,7 @@ export class WorldScene extends Phaser.Scene {
     window.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !inputBlocked()) {
         e.preventDefault();
-        this.input.keyboard!.resetKeys();
+        this.held = [];
         input.focus();
       }
     });

@@ -148,7 +148,7 @@ export function runCreator(root: HTMLElement, opts: StartOptions = {}): Promise<
       const sample = el("div", "welcome-sample");
       for (const id of STARTERS) {
         const s = SPECIES[id];
-        const art = creatureArt(id, s.name, s.types as TypeId[]);
+        const art = creatureArt(id, s.name, s.types as TypeId[], { scale: 3 });
         art.classList.add("welcome-art");
         sample.append(art);
       }
@@ -322,7 +322,7 @@ export function runCreator(root: HTMLElement, opts: StartOptions = {}): Promise<
         card.type = "button";
         card.style.setProperty("--type", TYPE_COLOR[types[0]]);
         card.setAttribute("aria-pressed", String(id === starter));
-        const art = creatureArt(id, s.name, types);
+        const art = creatureArt(id, s.name, types, { scale: 4 });
         art.classList.add("starter-art");
         const tag = el("span", "type-tag", types.map((t) => TYPE_LABEL[t]).join("/"));
         card.append(el("strong", "starter-name", s.name), art, tag, el("p", "", STARTER_BLURB[id] ?? ""));

@@ -40,7 +40,7 @@ async function start() {
       document.getElementById("hud-team-btn")!.addEventListener("click", () => openTeamPanel(room));
       document.getElementById("hud-bag-btn")!.addEventListener("click", () => openBagPanel(room));
 
-      new Phaser.Game({
+      const game = new Phaser.Game({
         type: Phaser.AUTO,
         parent: "game",
         backgroundColor: "#2f6b35",
@@ -49,6 +49,8 @@ async function start() {
         scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
         scene: [new WorldScene(room)],
       });
+      // acesso para depuração pelo console do navegador
+      (window as unknown as { wildora: unknown }).wildora = { game, room };
       return;
     } catch (err) {
       console.error(err);

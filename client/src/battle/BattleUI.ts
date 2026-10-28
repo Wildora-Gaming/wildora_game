@@ -109,7 +109,7 @@ export class BattleUI {
 
   private buildSide(side: Side, c: CreatureView): SideView {
     const fighter = el("div", `fighter ${side}`);
-    fighter.append(creatureArt(c.speciesId, c.name, c.types, side === "player" ? "back" : "front"));
+    fighter.append(creatureArt(c.speciesId, c.name, c.types, { scale: battleScale(side), mirror: side === "player" }));
 
     const info = el("div", `info ${side}`);
     const head = el("div", "info-head");
@@ -345,6 +345,13 @@ export class BattleUI {
     this.orb = null;
     uiState.inBattle = false;
   }
+}
+
+/** Escala inteira das criaturas na batalha, a partir da largura da janela. */
+function battleScale(side: Side) {
+  const frame = Math.min(960, window.innerWidth - 24);
+  const base = Math.max(2, Math.min(5, Math.floor(frame / 240)));
+  return side === "player" && frame >= 600 ? base + 1 : base;
 }
 
 function el(tag: string, className = "", text?: string) {

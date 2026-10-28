@@ -59,8 +59,7 @@
   background: linear-gradient(180deg, color-mix(in srgb, var(--type) 22%, #fffaf0) 0%, #fffaf0 70%); }
 .starter-card[aria-pressed="true"] { border-color: #1f2430; box-shadow: 0 5px 0 #1f2430; transform: translateY(-3px); }
 .starter-name { font-size: 26px; text-transform: uppercase; }
-.starter-art { width: 140px; height: 140px; }
-.starter-art img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.starter-art { height: 150px; }
 .type-tag { background: var(--type); color: #fff; border: 2px solid #1f2430; border-radius: 6px; padding: 1px 10px;
   font-size: 15px; font-weight: 700; text-transform: uppercase; }
 .starter-card p { margin: 0; font-family: system-ui, sans-serif; font-size: 14px; color: #4b5363; }
@@ -83,8 +82,7 @@
 .new-player p { margin: 0; font-family: system-ui, sans-serif; color: #4b5363; }
 .welcome-sample { display: flex; justify-content: center; gap: 4px; padding: 8px 0; border-radius: 10px;
   background: linear-gradient(180deg, #cfe9f6 0 60%, #a8d97c 60% 100%); border: 2px solid #c9c1ad; }
-.welcome-art { width: 96px; height: 96px; }
-.welcome-art img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+.welcome-art { height: 110px; }
 .field { display: grid; gap: 4px; }
 .field .field-label { margin: 0; }
 .form-error, .creator-error { color: #c4302b; font-family: system-ui, sans-serif; font-size: 14px; min-height: 1.2em; }

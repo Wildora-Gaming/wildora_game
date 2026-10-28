@@ -8,6 +8,7 @@ import {
   DIRECTION_DELTA,
   ENCOUNTER_CHANCE,
   MAX_PLAYERS_PER_ROOM,
+  MOVE_BURST,
   MOVE_COOLDOWN_MS,
   NAME_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -22,7 +23,7 @@ import {
   type ProfileMessage,
   type ShopMessage,
 } from "../../../shared/constants";
-import { HEAL_POINT, SPAWN, Tile, isWalkable, objectAt, tileAt } from "../../../shared/map";
+import { HEAL_POINT, SPAWN, Tile, doorOf, isWalkable, objectAt, tileAt } from "../../../shared/map";
 import { rollWild, zoneAt } from "../../../shared/creatures";
 import { sanitizeLook } from "../../../shared/avatar/look";
 import { STARTERS, STARTER_LEVEL, getSpecies, isSpeciesId } from "../../../shared/battle/data";
@@ -54,6 +55,8 @@ interface JoinOptions {
 interface Session {
   trainer: Trainer;
   lastMoveAt: number;
+  /** passos disponíveis (balde que enche 1 a cada MOVE_COOLDOWN_MS) */
+  moveTokens: number;
   lastChatAt: number;
   lastActionAt: number;
   battle: BattleState | null;
@@ -154,7 +157,8 @@ export class WorldRoom extends Room<WorldState> {
     this.state.players.set(client.sessionId, player);
     this.sessions.set(client.sessionId, {
       trainer,
-      lastMoveAt: 0,
+      lastMoveAt: Date.now(),
+      moveTokens: MOVE_BURST,
       lastChatAt: 0,
       lastActionAt: 0,
       battle: null,
@@ -219,25 +223,39 @@ export class WorldRoom extends Room<WorldState> {
 
   private handleMove(client: Client, message: unknown) {
     const r = this.ready(client);
-    if (!r || r.s.battle) return;
+    if (!r) return;
     const { s, player } = r;
 
-    const dir = (message as { dir?: unknown } | null)?.dir;
+    const m = message as { dir?: unknown; seq?: unknown } | null;
+    const dir = m?.dir;
     if (!isDirection(dir)) return;
+    const seq = Number(m?.seq);
+    // Sempre confirma o número do pedido, aceito ou não: o cliente corrige a previsão se precisar.
+    const ack = () => {
+      if (Number.isInteger(seq) && seq > player.seq && seq < 2 ** 32) player.seq = seq;
+    };
 
-    // O servidor é a autoridade: o cliente só pede, quem decide é aqui.
+    if (s.battle) return ack(); // em batalha não anda
+
+    // O servidor é a autoridade: limita a velocidade média com um balde de passos.
     const now = Date.now();
-    if (now - s.lastMoveAt < MOVE_COOLDOWN_MS) return;
+    s.moveTokens = Math.min(MOVE_BURST, s.moveTokens + (now - s.lastMoveAt) / MOVE_COOLDOWN_MS);
     s.lastMoveAt = now;
+    if (s.moveTokens < 1) return ack();
+    s.moveTokens -= 1;
 
     player.dir = dir;
     const { dx, dy } = DIRECTION_DELTA[dir];
     const nx = player.x + dx;
     const ny = player.y + dy;
     if (!isWalkable(nx, ny)) {
+      ack();
       // Andar contra a porta do Centro de Cura ou da Loja já entra
       const obj = objectAt(nx, ny);
-      if (obj?.role && dir === "up" && ny === obj.y + obj.h - 1) this.interactWith(client, s, obj, nx, ny);
+      if (obj?.role && dir === "up") {
+        const door = doorOf(obj);
+        if (door.x === nx && door.y === ny) this.interactWith(client, s, obj, nx, ny);
+      }
       return; // só vira de lado
     }
 
@@ -245,6 +263,7 @@ export class WorldRoom extends Room<WorldState> {
     player.y = ny;
     s.trainer.x = nx;
     s.trainer.y = ny;
+    ack();
 
     if (tileAt(nx, ny) === Tile.TallGrass && this.rng() < ENCOUNTER_CHANCE) {
       const zone = zoneAt(nx, ny);

@@ -5,8 +5,11 @@ import type { BattleEvent, CreatureView } from "./battle/engine";
 
 export const TILE_SIZE = 16;
 
-/** Tempo mínimo entre dois passos de um jogador (ms). O servidor impõe isso. */
+/** Tempo de um passo (ms). O servidor limita a velocidade média a 1 passo por este intervalo. */
 export const MOVE_COOLDOWN_MS = 160;
+
+/** Passos que podem chegar juntos (variação da rede) sem serem recusados. */
+export const MOVE_BURST = 3;
 
 /** Chance de encontro a cada passo na grama alta (0–1). */
 export const ENCOUNTER_CHANCE = 0.12;

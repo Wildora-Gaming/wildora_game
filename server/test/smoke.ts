@@ -141,13 +141,21 @@ async function main() {
   assert.deepEqual([me(a).x, me(a).y], [SPAWN.x, SPAWN.y]);
   a.send("move", { dir: "right" });
   await waitFor(() => b.state.players.get(a.sessionId)?.x === SPAWN.x + 1, "B ver A andar");
+  // Balde de passos: com ele cheio, uma rajada de 8 pedidos anda no máximo 3 tiles
+  await sleep(MOVE_COOLDOWN_MS * 4);
+  const x0 = me(a).x;
+  for (let i = 0; i < 8; i++) a.send("move", { dir: "left", seq: 100 + i });
+  await waitFor(() => me(a).seq === 107, "confirmação do último pedido");
+  assert.equal(x0 - me(a).x, 3, "só 3 passos da rajada deveriam ser aceitos");
+  // volta ao spawn no ritmo normal
+  await walk(a, "right", 3);
+  assert.equal(me(a).x, SPAWN.x);
+  a.send("move", { dir: "up", seq: 5 }); // número velho: não volta a confirmação
   await sleep(STEP);
-  for (let i = 0; i < 6; i++) a.send("move", { dir: "left" });
-  await sleep(STEP);
-  assert.equal(me(a).x, SPAWN.x, "só um passo deveria ter sido aceito");
+  assert.equal(me(a).seq, 107);
   a.send("move", { dir: "teleport" });
   a.send("hack", { x: 1 });
-  ok("movimento sincronizado, cooldown e mensagens inválidas");
+  ok("movimento sincronizado, limite de velocidade com rajada, confirmação por número e mensagens inválidas");
 
   await walk(a, "up", 8);
   assert.ok(!isWalkable(me(a).x, me(a).y - 1));
