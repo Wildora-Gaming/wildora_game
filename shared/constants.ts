@@ -74,9 +74,19 @@ export interface ProfileMessage {
   team: CreatureView[];
   box: CreatureView[];
   dex: { seen: number; caught: number };
+  badges: string[];
+}
+export interface TrainerInfo {
+  name: string;
+  title: string;
+  look: string;
 }
 export interface BattleStartMessage {
   wild: boolean;
+  /** batalha contra treinador */
+  trainer?: TrainerInfo;
+  /** criaturas do time inimigo */
+  foeCount: number;
   team: CreatureView[];
   active: number;
   foe: CreatureView;
@@ -98,6 +108,18 @@ export interface DialogMessage {
 export interface ShopMessage {
   items: { id: string; name: string; description: string; price: number }[];
   money: number;
+}
+export interface GymOfferMessage {
+  gymId: string;
+  name: string;
+  type: string;
+  badge: string;
+  level: number;
+  leader: string;
+  quote: string;
+  trainers: number;
+  hasBadge: boolean;
+  badges: number;
 }
 export interface NoticeMessage {
   text: string;

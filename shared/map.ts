@@ -1,3 +1,5 @@
+import { GYMS } from "./gyms";
+import { TYPE_IDS } from "./battle/types";
 // Mapa "Campina Inicial" com a Vila Broto no centro.
 // Gerado por código de forma determinística: cliente e servidor chegam ao mesmo mundo.
 // Duas camadas: o chão (um tipo por tile) e objetos (árvores, casas, pedras...) que bloqueiam
@@ -12,7 +14,7 @@ export enum Tile {
   Flowers = 5,
 }
 
-export type ObjectKind = "tree" | "pine" | "house" | "rock" | "fence" | "lamp" | "sign" | "bush" | "well";
+export type ObjectKind = "tree" | "pine" | "house" | "rock" | "fence" | "lamp" | "sign" | "bush" | "well" | "gym" | "npc";
 
 export interface MapObject {
   kind: ObjectKind;
@@ -24,13 +26,22 @@ export interface MapObject {
   /** variação visual (cor do telhado etc.) */
   variant: number;
   /** função especial: Centro de Cura, Loja */
-  role?: "heal" | "shop";
+  role?: "heal" | "shop" | "gym";
+  /** ginásio deste prédio ou deste líder */
+  gymId?: string;
+  /** NPC: aparência e nome */
+  look?: string;
+  name?: string;
   /** texto das placas */
   text?: string;
 }
 
+/** Colunas e fileiras dos ginásios no Distrito (canto superior esquerdo do prédio). */
+const GYM_COLS = [14, 26, 60, 72];
+const GYM_ROWS = [73, 81];
+
 export const MAP_WIDTH = 96;
-export const MAP_HEIGHT = 72;
+export const MAP_HEIGHT = 96;
 
 export const SPAWN = { x: 47, y: 37 };
 /** Em frente à porta do Centro de Cura: onde o jogador volta após perder. */
@@ -47,6 +58,8 @@ const FOOTPRINT: Record<ObjectKind, [number, number]> = {
   sign: [1, 1],
   bush: [1, 1],
   well: [2, 1],
+  gym: [7, 4],
+  npc: [1, 1],
 };
 
 function mulberry32(seed: number) {
@@ -101,6 +114,9 @@ function buildWorld() {
   ellipse(14, 34, 3.5, 2.5, Tile.Sand);
   ellipse(14, 34, 2.5, 1.6, Tile.Water);
 
+  // --- Distrito dos Ginásios (sul): terreno limpo para as duas ruas ---
+  rect(6, 71, W - 12, 20, Tile.Grass);
+
   // --- Estradas ---
   rect(5, 36, W - 10, 2, Tile.Path); // leste-oeste
   rect(47, 5, 2, H - 10, Tile.Path); // norte-sul
@@ -108,6 +124,8 @@ function buildWorld() {
   rect(62, 14 + 8, 2, 14, Tile.Path); // ramal até o lago
   rect(62, 21, 6, 2, Tile.Path);
   rect(19, 22, 2, 14, Tile.Path); // ramal até a campina oeste
+  rect(10, GYM_ROWS[0] + 5, W - 20, 2, Tile.Path); // rua dos ginásios (1ª fileira)
+  rect(10, GYM_ROWS[1] + 5, W - 20, 2, Tile.Path); // rua dos ginásios (2ª fileira)
 
   // --- Flores ---
   for (let k = 0; k < 260; k++) {
@@ -161,6 +179,20 @@ function buildWorld() {
   });
   place("sign", 22, 34, 0, true, { text: "Campina Norte, subindo a trilha. Orla do Bosque ao sul." });
   place("sign", 64, 34, 0, true, { text: "Campos do Leste e Lago Espelho ao norte. Pradaria Sul descendo a estrada." });
+  // Ginásios: duas fileiras de quatro, porta virada para a rua
+  GYMS.forEach((gym, i) => {
+    const x = GYM_COLS[i % 4];
+    const y = GYM_ROWS[Math.floor(i / 4)];
+    const door = { x: x + 3, y: y + 3 };
+    set(door.x, door.y + 1, Tile.Path);
+    place("gym", x, y, TYPE_IDS.indexOf(gym.type), true, { role: "gym", gymId: gym.id });
+    place("npc", door.x + 2, door.y + 1, 0, true, { gymId: gym.id, look: gym.leader.look, name: gym.leader.name });
+  });
+  place("sign", 45, GYM_ROWS[0] + 2, 0, true, {
+    text: "Distrito dos Ginásios. Oito ginásios, um de cada tipo. Vença os treinadores e o líder de cada um para ganhar a insígnia. Na fileira de cima ficam os mais fáceis.",
+  });
+  place("sign", 49, 66, 0, true, { text: "Ao sul: Distrito dos Ginásios." });
+
   // cercas dos quintais
   for (let i = 0; i < 6; i++) {
     place("fence", 35 + i, 29, 0, true);
@@ -244,7 +276,7 @@ export function objectAt(x: number, y: number): MapObject | undefined {
 
 /** Tile da porta de uma casa (linha de baixo, coluna do meio). */
 export function doorOf(o: MapObject) {
-  return { x: o.x + 2, y: o.y + o.h - 1 };
+  return { x: o.x + Math.floor(o.w / 2), y: o.y + o.h - 1 };
 }
 
 /** Caminho mais curto (BFS) até o primeiro tile que satisfaz `goal`. Lista de passos, sem a origem. */

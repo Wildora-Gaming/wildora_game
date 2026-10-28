@@ -24,6 +24,7 @@ import {
   tileAt,
 } from "../../shared/map";
 import { encodeLook, parseLook } from "../../shared/avatar/look";
+import { createCreature } from "../../shared/battle/engine";
 
 const PORT = 2599;
 const URL = `ws://localhost:${PORT}`;
@@ -303,6 +304,52 @@ async function main() {
   a.send("team_order", { from: 1, to: 0 });
   await waitFor(() => ia.profile.at(-1).team[0].speciesId !== "flambo", "nova líder");
   ok("caixa e ordem do time");
+
+  // ---------- Ginásio ----------
+  {
+    // time forte para atravessar o ginásio rápido (acesso direto à sessão do servidor)
+    const session = (room as any).sessions.get(a.sessionId);
+    session.trainer.team.unshift(createCreature("flamberus", 60));
+    const gymObj = MAP_OBJECTS.find((o) => o.kind === "gym" && o.gymId === "fera")!;
+    const door = doorOf(gymObj);
+    room.rng = () => 0.99;
+    await walkPath(a, findPath(me(a), (x, y) => x === door.x && y === door.y + 1)!);
+    const offers: any[] = [];
+    a.onMessage("gym_offer", (m) => offers.push(m));
+    a.send("move", { dir: "up" }); // anda contra a porta
+    await waitFor(() => offers.length > 0, "oferta do ginásio");
+    assert.equal(offers[0].gymId, "fera");
+    assert.equal(offers[0].hasBadge, false);
+    const starts0 = ia.battle_start.length;
+    const turns0 = ia.battle_turn.length;
+    room.rng = seeded(3);
+    a.send("gym_challenge", { gymId: "fera" });
+    for (let i = 0; i < 80; i++) {
+      const started = ia.battle_start.length - starts0;
+      const finished = ia.battle_turn.slice(turns0).filter((t: any) => t.over).length;
+      if (started === 3 && finished === 3) break;
+      if (finished >= started) {
+        await sleep(100); // esperando o próximo treinador
+        continue;
+      }
+      const last = ia.battle_turn.at(-1);
+      const before = ia.battle_turn.length;
+      if (last?.needSwitch && !last.over) a.send("battle_action", { kind: "switch", index: last.team.findIndex((c: any) => c.hp > 0) });
+      else a.send("battle_action", { kind: "move", moveIndex: 0 });
+      await waitFor(() => ia.battle_turn.length > before, "turno do ginásio", 4000);
+      await sleep(330);
+    }
+    const starts = ia.battle_start.slice(starts0);
+    assert.deepEqual(starts.map((m: any) => m.trainer?.name), ["Bia", "Caio", "Duda"]);
+    assert.equal(starts[2].foeCount, 3);
+    const gymTurns = ia.battle_turn.slice(turns0).flatMap((t: any) => t.events.map((e: any) => e.t));
+    assert.ok(gymTurns.includes("foe_switch"), "treinador troca de criatura");
+    await waitFor(() => ia.dialog.some((d) => d.title === "Insígnia Garra"), "insígnia");
+    await waitFor(() => ia.profile.at(-1).badges.includes("fera"), "insígnia no perfil");
+    assert.ok((ia.profile.at(-1).bag.orbi_prata ?? 0) >= 2, "prêmio do líder");
+    room.rng = Math.random;
+    ok("ginásio: 2 treinadores e o líder em sequência, troca do inimigo, insígnia e prêmio");
+  }
 
   // ---------- Salvamento ----------
   const saved = { x: me(a).x, y: me(a).y, team: ia.profile.at(-1).team.length };

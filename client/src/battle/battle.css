@@ -101,3 +101,13 @@
 @keyframes wobble { 25% { transform: rotate(-22deg); } 75% { transform: rotate(22deg); } }
 .thrown-orb.caught { filter: drop-shadow(0 0 8px #ffd84a); }
 .fighter.absorbed { opacity: 0; scale: 0.2; }
+
+/* Treinador adversário */
+.trainer-portrait { position: absolute; right: 3%; top: 6%; display: grid; justify-items: center; gap: 2px; }
+.trainer-portrait canvas { image-rendering: pixelated; width: 64px; height: 96px; }
+.trainer-portrait span { font-size: 13px; background: #fbf6e3; border: 2px solid #1f2430; border-radius: 6px; padding: 0 6px; }
+.foe-balls { position: absolute; left: 5%; top: calc(6% + 62px); display: flex; gap: 4px; }
+.foe-balls[hidden] { display: none; }
+.foe-balls .ball { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #1f2430;
+  background: linear-gradient(180deg, #2bb3a3 0 45%, #1f2430 45% 55%, #f3ead2 55%); }
+.foe-balls .ball.out { background: #9aa0b4; opacity: 0.6; }

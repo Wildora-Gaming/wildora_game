@@ -345,6 +345,98 @@ function drawWell() {
   return cv;
 }
 
+
+// ---------------- Ginásios ----------------
+
+/** Ícones 7x7 dos tipos (1 = pixel aceso), na ordem de TYPE_IDS. */
+const TYPE_ICONS: string[][] = [
+  // flora: folha
+  ["...1...", "..111..", ".11111.", ".11111.", "..111..", "...1...", "..1...."],
+  // brasa: chama
+  ["...1...", "..11...", "..111..", ".11111.", ".11.11.", ".11111.", "..111.."],
+  // maré: gota
+  ["...1...", "...1...", "..111..", ".11111.", ".11111.", ".11111.", "..111.."],
+  // pedra: rocha
+  ["..111..", ".11111.", "1111111", "1111111", "1111111", ".11111.", "......."],
+  // vento: rajadas
+  ["1111...", "....1..", "111111.", "......1", "11111..", ".....1.", "111...."],
+  // faísca: raio
+  ["...111.", "..111..", ".111...", "111111.", "...111.", "..111..", ".11...."],
+  // fera: pegada
+  [".1...1.", "1.1.1.1", ".1...1.", "..111..", ".11111.", ".11111.", "..111.."],
+  // espectro: fantasma
+  ["..111..", ".11111.", "1.1.1.1", "1111111", "1111111", "1111111", "1.1.1.1"],
+];
+const TYPE_ROOF: [string, string][] = [
+  ["#5bb04a", "#3f8a35"],
+  ["#e8692f", "#b84d1f"],
+  ["#3a86c8", "#2a66a0"],
+  ["#9a8f80", "#746a5d"],
+  ["#7fbde3", "#5a98c2"],
+  ["#f2c53d", "#c4952f"],
+  ["#b08560", "#86613f"],
+  ["#7b5ea7", "#5b4199"],
+];
+
+function drawGym(variant: number) {
+  const W = 112;
+  const H = 104;
+  const [cv, c] = canvas(W, H);
+  const [roof, roofShade] = TYPE_ROOF[variant % TYPE_ROOF.length];
+  const wallTop = 46;
+  // paredes de pedra clara
+  px(c, 2, wallTop, OUT, W - 4, H - wallTop);
+  px(c, 3, wallTop + 1, "#e9e3d3", W - 6, H - wallTop - 2);
+  for (let y = wallTop + 8; y < H - 2; y += 8) px(c, 3, y, "#d6cdb6", W - 6, 1);
+  for (let y = wallTop + 1, k = 0; y < H - 2; y += 8, k++)
+    for (let x = 3 + (k % 2) * 8; x < W - 3; x += 16) px(c, x, y, "#d6cdb6", 1, 7);
+  // faixa colorida do tipo
+  px(c, 3, wallTop + 2, roof, W - 6, 4);
+  // colunas
+  for (const x of [10, W - 18]) {
+    px(c, x - 1, wallTop, OUT, 10, H - wallTop);
+    px(c, x, wallTop + 1, "#fffaf0", 8, H - wallTop - 2);
+    px(c, x + 6, wallTop + 1, "#d6cdb6", 2, H - wallTop - 2);
+  }
+  // porta dupla
+  const dx = W / 2 - 12;
+  px(c, dx - 1, H - 30, OUT, 26, 30);
+  px(c, dx, H - 29, "#7a4a24", 24, 29);
+  px(c, dx, H - 29, roof, 24, 3);
+  px(c, dx + 11, H - 26, OUT, 2, 26);
+  px(c, dx + 8, H - 14, "#f2c53d", 2, 2);
+  px(c, dx + 14, H - 14, "#f2c53d", 2, 2);
+  // janelas
+  for (const wx of [24, W - 38]) {
+    px(c, wx - 1, wallTop + 12, OUT, 16, 14);
+    px(c, wx, wallTop + 13, "#8dcdf2", 14, 12);
+    px(c, wx, wallTop + 13, "#cdeeff", 6, 5);
+    px(c, wx + 7, wallTop + 13, OUT, 1, 12);
+  }
+  // telhado escalonado
+  for (let y = 0; y < wallTop - 6; y++) {
+    const inset = Math.max(0, 22 - Math.floor(y * 0.6));
+    px(c, inset, y + 6, OUT, W - inset * 2, 1);
+    if (y > 0) px(c, inset + 1, y + 6, y % 6 < 3 ? roof : roofShade, W - inset * 2 - 2, 1);
+  }
+  px(c, 0, wallTop - 1, OUT, W, 2);
+  // emblema do tipo no frontão
+  const ex = W / 2 - 9;
+  const ey = 10;
+  blobShape(c, W / 2, ey + 9, 10, 10, "#fffaf0", "#ffffff", "#e6ddc6");
+  const icon = TYPE_ICONS[variant % TYPE_ICONS.length];
+  icon.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) if (row[x] === "1") px(c, ex + 2 + x * 2, ey + 2 + y * 2, roofShade, 2, 2);
+  });
+  return cv;
+}
+
+function drawNpc() {
+  // o NPC é desenhado pela cena com a aparência dele; aqui só um marcador vazio
+  const [cv] = canvas(16, 16);
+  return cv;
+}
+
 const DRAW: Record<ObjectKind, (variant: number, role?: string) => HTMLCanvasElement> = {
   tree: drawTree,
   pine: drawPine,
@@ -355,6 +447,8 @@ const DRAW: Record<ObjectKind, (variant: number, role?: string) => HTMLCanvasEle
   lamp: drawLamp,
   sign: drawSign,
   well: drawWell,
+  gym: drawGym,
+  npc: drawNpc,
 };
 
 const cache = new Map<string, HTMLCanvasElement>();

@@ -95,12 +95,36 @@ export class WorldScene extends Phaser.Scene {
     this.add.image(0, 0, "ground").setOrigin(0).setDepth(-100000);
 
     for (const o of MAP_OBJECTS) {
+      if (o.kind === "npc") {
+        this.drawNpc(o);
+        continue;
+      }
       const key = objectKey(o);
       if (!this.textures.exists(key)) this.textures.addCanvas(key, objectArt(o));
       const x = o.x * TILE_SIZE + (o.w * TILE_SIZE) / 2;
       const y = (o.y + o.h) * TILE_SIZE;
       this.add.image(x, y, key).setOrigin(0.5, 1).setDepth(y);
     }
+  }
+
+  /** Líder do ginásio parado ao lado da porta, com o nome em cima. */
+  private drawNpc(o: (typeof MAP_OBJECTS)[number]) {
+    const key = ensureAvatar(this, o.look ?? "");
+    const x = px(o.x);
+    const y = py(o.y);
+    this.add.ellipse(x, y - 1, 12, 4, 0x000000, 0.22).setDepth(y - 1);
+    this.add.sprite(x, y, key, frameIndex("down", "stand")).setOrigin(0.5, 1).setDepth(y);
+    this.add
+      .text(x, y - 26, o.name ?? "", {
+        fontFamily: '"Pixelify Sans", system-ui, sans-serif',
+        fontSize: "14px",
+        color: "#ffd84a",
+        stroke: "#1f1a24",
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5, 1)
+      .setScale(1 / WORLD_ZOOM)
+      .setDepth(y + 1);
   }
 
   // ---------- Movimento ----------

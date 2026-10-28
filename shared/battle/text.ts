@@ -6,10 +6,12 @@ import type { BattleEvent, Side } from "./engine";
 export interface BattleNames {
   player: string;
   foe: string;
+  /** nome do treinador adversário (batalhas de ginásio) */
+  trainer?: string;
 }
 
 export function sideName(side: Side, names: BattleNames, wild = true): string {
-  return side === "player" ? names.player : wild ? `${names.foe} selvagem` : names.foe;
+  return side === "player" ? names.player : wild ? `${names.foe} selvagem` : `${names.foe} adversário`;
 }
 
 const STATUS_TEXT: Record<string, string> = {
@@ -66,6 +68,8 @@ export function describeEvent(e: BattleEvent, names: BattleNames, wild = true): 
       return e.ok ? "Você fugiu em segurança!" : "Não conseguiu fugir!";
     case "switch":
       return `Vai, ${e.view.name}!`;
+    case "foe_switch":
+      return `${names.trainer ?? "O adversário"} mandou ${e.view.name}!`;
     case "heal":
       return `${e.amount > 0 ? `Recuperou ${e.amount} de Vida.` : "Não teve efeito."}`;
     case "throw":

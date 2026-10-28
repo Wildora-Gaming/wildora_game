@@ -57,6 +57,7 @@ export function zoneAt(x: number, y: number): Zone {
 
 /** Nome da região para mostrar ao jogador. */
 export function areaName(x: number, y: number): string {
+  if (y >= 70) return "Distrito dos Ginásios";
   if (x >= 31 && x <= 63 && y >= 23 && y <= 49) return "Vila Broto";
   if (x >= 58 && y <= 24) return "Lago Espelho";
   return zoneAt(x, y).name;

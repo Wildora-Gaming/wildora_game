@@ -139,7 +139,10 @@ export interface BattleState {
   team: Creature[];
   /** índice da criatura em campo no time */
   active: number;
+  /** criatura inimiga em campo */
   foe: Creature;
+  /** time inimigo completo (selvagem: só uma) */
+  foeTeam: Creature[];
   wild: boolean;
   turn: number;
   result: BattleResult | null;
@@ -162,6 +165,7 @@ export type BattleEvent =
   | { t: "faint"; side: Side }
   | { t: "run"; ok: boolean }
   | { t: "switch"; index: number; view: CreatureView }
+  | { t: "foe_switch"; view: CreatureView; left: number }
   | { t: "heal"; index: number; itemId: string; amount: number; hp: number; maxHp: number }
   | { t: "throw"; itemId: string }
   | { t: "shake"; count: number }
@@ -179,12 +183,14 @@ export function activeOf(state: BattleState): Creature {
   return state.team[state.active];
 }
 
-export function startBattle(team: Creature[], foe: Creature, wild = true): BattleState {
+export function startBattle(team: Creature[], foes: Creature | Creature[], wild = true): BattleState {
   const active = Math.max(0, team.findIndex((c) => c.hp > 0));
+  const foeTeam = Array.isArray(foes) ? foes : [foes];
   return {
     team,
     active,
-    foe,
+    foe: foeTeam[0],
+    foeTeam,
     wild,
     turn: 0,
     result: null,
@@ -226,6 +232,37 @@ export function isValidAction(state: BattleState, action: unknown): action is Ac
 
 export function chooseWildAction(state: BattleState, rng: Rng): Action {
   return { kind: "move", moveIndex: Math.floor(rng() * state.foe.moves.length) };
+}
+
+/**
+ * Treinadores escolhem o golpe que mais rende (dano esperado ou estado útil).
+ * `smart` = chance de jogar bem (líderes jogam melhor que treinadores comuns).
+ */
+export function chooseTrainerAction(state: BattleState, rng: Rng, smart = 0.65): Action {
+  const foe = state.foe;
+  const target = activeOf(state);
+  if (rng() >= smart) return chooseWildAction(state, rng);
+  const foeTypes = getSpecies(foe.speciesId).types as TypeId[];
+  const targetTypes = getSpecies(target.speciesId).types as TypeId[];
+  let best = 0;
+  let bestScore = -1;
+  foe.moves.forEach((id, i) => {
+    const m = getMove(id);
+    let score: number;
+    if (m.power === null) score = target.status === null && m.effect ? 45 : 0;
+    else score = m.power * effectiveness(m.type, targetTypes) * (foeTypes.includes(m.type) ? STAB : 1);
+    score *= m.accuracy / 100;
+    if (score > bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  });
+  return { kind: "move", moveIndex: best };
+}
+
+/** Criaturas inimigas que ainda podem lutar. */
+export function foesLeft(state: BattleState): number {
+  return state.foeTeam.filter((c) => c.hp > 0).length;
 }
 
 function effectiveSpeed(c: Creature): number {
@@ -293,6 +330,21 @@ export function resolveTurn(state: BattleState, playerAction: Action, foeAction:
     const c = activeOf(state);
     if (!state.participants.includes(c.uid)) state.participants.push(c.uid);
     events.push({ t: "switch", index, view: toView(c) });
+  };
+
+  /** Criatura inimiga desmaiou: XP, e o treinador manda a próxima ou a batalha acaba. */
+  const foeFainted = () => {
+    events.push({ t: "faint", side: "foe" });
+    events.push(...awardExperience(state, false));
+    const next = state.foeTeam.find((c) => c.hp > 0);
+    if (!next) {
+      events.push(...evolveTeam(state));
+      finish("win");
+      return;
+    }
+    state.foe = next;
+    state.participants = [activeOf(state).uid];
+    events.push({ t: "foe_switch", view: toView(next, false), left: foesLeft(state) });
   };
 
   /** Desmaio da criatura do jogador: troca forçada se houver outra de pé. */
@@ -406,10 +458,8 @@ export function resolveTurn(state: BattleState, playerAction: Action, foeAction:
       target.hp = Math.max(0, target.hp - amount);
       events.push({ t: "damage", side: other(side), amount, hp: target.hp, maxHp: calcStats(target).maxHp, eff, crit });
       if (target.hp === 0) {
-        if (side === "player") {
-          events.push({ t: "faint", side: "foe" });
-          finish("win");
-        } else playerFainted();
+        if (side === "player") foeFainted();
+        else playerFainted();
         break;
       }
     }
@@ -438,10 +488,8 @@ export function resolveTurn(state: BattleState, playerAction: Action, foeAction:
         c.hp = Math.max(0, c.hp - amount);
         events.push({ t: "tick", side, status: c.status, amount, hp: c.hp, maxHp });
         if (c.hp === 0) {
-          if (side === "foe") {
-            events.push({ t: "faint", side: "foe" });
-            finish("win");
-          } else playerFainted();
+          if (side === "foe") foeFainted();
+          else playerFainted();
         }
       } else if (c.status === "assustado") {
         c.statusTurns -= 1;
@@ -458,10 +506,10 @@ export function resolveTurn(state: BattleState, playerAction: Action, foeAction:
 }
 
 /**
- * Recompensas de vitória ou captura: XP para quem participou e está de pé,
- * subida de nível, golpes novos e evolução. Devolve os eventos (antes do "end").
+ * XP pela criatura inimiga em campo, dividido entre quem lutou contra ela e está de pé:
+ * subida de nível e golpes novos. Com `evolve`, também evolui (fim da batalha).
  */
-export function awardExperience(state: BattleState): BattleEvent[] {
+export function awardExperience(state: BattleState, evolve = true): BattleEvent[] {
   const events: BattleEvent[] = [];
   const total = xpReward(state.foe, !state.wild);
   const earners = state.team.filter((c) => c.hp > 0 && state.participants.includes(c.uid));
@@ -473,6 +521,19 @@ export function awardExperience(state: BattleState): BattleEvent[] {
     const { levels, learned } = gainXp(c, share);
     for (const level of levels) events.push({ t: "level", name, level });
     for (const moveId of learned) events.push({ t: "learn", name, moveId });
+    if (evolve) {
+      const evo = evolveIfReady(c);
+      if (evo) events.push({ t: "evolve", ...evo });
+    }
+  }
+  return events;
+}
+
+/** Evoluções pendentes no fim da batalha (a arte não muda no meio da luta). */
+export function evolveTeam(state: BattleState): BattleEvent[] {
+  const events: BattleEvent[] = [];
+  for (const c of state.team) {
+    if (c.hp <= 0) continue;
     const evo = evolveIfReady(c);
     if (evo) events.push({ t: "evolve", ...evo });
   }

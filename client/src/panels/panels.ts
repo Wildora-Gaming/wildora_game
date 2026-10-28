@@ -8,7 +8,8 @@ import { onProfile, uiState } from "../ui-state";
 import { getItem } from "../../../shared/items";
 import { TYPE_COLOR, TYPE_LABEL } from "../../../shared/battle/types";
 import { STATUS_LABEL } from "../../../shared/battle/data";
-import { TEAM_MAX, type ProfileMessage, type ShopMessage } from "../../../shared/constants";
+import { TEAM_MAX, type GymOfferMessage, type ProfileMessage, type ShopMessage } from "../../../shared/constants";
+import { GYMS } from "../../../shared/gyms";
 import type { CreatureView } from "../../../shared/battle/engine";
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text?: string) {
@@ -166,7 +167,7 @@ export function openTeamPanel(room: Room) {
       body.append(list);
     }
     const foot = el("div", "dex-line", `Criaturas vistas: ${p.dex.seen} · capturadas: ${p.dex.caught}`);
-    body.append(foot);
+    body.append(foot, badgeRow(p.badges));
   };
   const m = openModal("team", "Seu time", body, { wide: true });
   m.setRender(render);
@@ -247,4 +248,53 @@ export function openShop(room: Room, msg: ShopMessage) {
   const m = openModal("shop", "Loja da Vila Broto", body, { wide: true });
   m.setRender(render);
   render();
+}
+
+// ---------------- Insígnias ----------------
+
+export function badgeRow(owned: string[]) {
+  const row = el("div", "badges");
+  row.append(el("strong", "", `Insígnias ${owned.length}/${GYMS.length}`));
+  const list = el("div", "badge-list");
+  for (const g of GYMS) {
+    const b = el("span", `badge${owned.includes(g.id) ? " got" : ""}`);
+    b.style.setProperty("--type", TYPE_COLOR[g.type]);
+    b.title = owned.includes(g.id) ? g.badge : `${g.badge} (${g.name})`;
+    list.append(b);
+  }
+  row.append(list);
+  return row;
+}
+
+// ---------------- Ginásio ----------------
+
+export function openGymOffer(room: Room, msg: GymOfferMessage) {
+  const body = el("div", "modal-body gym-offer");
+  const lead = el("p", "gym-quote", `“${msg.quote}” — ${msg.leader}, líder`);
+  const facts = el("ul", "gym-facts");
+  for (const line of [
+    `Tipo: ${msg.type}`,
+    `Desafio: ${msg.trainers} treinadores e o líder, em sequência, sem curar no meio`,
+    `Nível sugerido: ${msg.level}`,
+    msg.hasBadge ? `Você já tem a ${msg.badge}: a revanche vale Sementes e XP` : `Prêmio: ${msg.badge}`,
+  ])
+    facts.append(el("li", "", line));
+  const team = uiState.profile?.team ?? [];
+  const tip = el(
+    "p",
+    "hint",
+    team.length
+      ? `Seu time: ${team.map((c) => `${c.name} Nv.${c.level}`).join(", ")}.`
+      : "",
+  );
+  const actions = el("div", "gym-actions");
+  actions.append(
+    btn("Agora não", closeModal, "ghost"),
+    btn("Desafiar", () => {
+      closeModal();
+      room.send("gym_challenge", { gymId: msg.gymId });
+    }),
+  );
+  body.append(lead, facts, tip, actions);
+  openModal("gym", msg.name, body);
 }

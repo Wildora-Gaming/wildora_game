@@ -24,6 +24,8 @@ export interface Trainer {
   box: Creature[];
   dex: { seen: string[]; caught: string[] };
   stats: { wins: number; caught: number };
+  /** ids dos ginásios vencidos */
+  badges: string[];
   createdAt: number;
   lastSeen: number;
 }
@@ -55,7 +57,7 @@ export class Store {
   constructor(private file: string) {
     if (existsSync(file)) {
       const data = JSON.parse(readFileSync(file, "utf8")) as FileShape;
-      for (const t of data.trainers ?? []) this.index(t);
+      for (const t of data.trainers ?? []) this.index({ ...t, badges: t.badges ?? [] });
     }
   }
 

@@ -4,10 +4,10 @@ import { connect } from "./network";
 import { WorldScene } from "./scenes/WorldScene";
 import { BattleUI } from "./battle/BattleUI";
 import { runCreator, type StartOptions } from "./creator/creator";
-import { openBagPanel, openShop, openTeamPanel, showDialog } from "./panels/panels";
-import { setProfile } from "./ui-state";
+import { openBagPanel, openGymOffer, openShop, openTeamPanel, showDialog } from "./panels/panels";
+import { setProfile, uiState } from "./ui-state";
 import { toast } from "./toast";
-import type { DialogMessage, NoticeMessage, ProfileMessage, ShopMessage } from "../../shared/constants";
+import type { DialogMessage, GymOfferMessage, NoticeMessage, ProfileMessage, ShopMessage } from "../../shared/constants";
 
 const loginRoot = document.getElementById("login")!;
 
@@ -29,8 +29,18 @@ async function start() {
         setProfile(msg);
         renderHud(msg);
       });
-      room.onMessage("dialog", (msg: DialogMessage) => showDialog(msg.title, msg.text));
+      // Avisos que chegam durante a batalha esperam ela terminar de animar
+      const afterBattle = (fn: () => void) => {
+        if (!uiState.inBattle) return fn();
+        const timer = window.setInterval(() => {
+          if (uiState.inBattle) return;
+          window.clearInterval(timer);
+          fn();
+        }, 150);
+      };
+      room.onMessage("dialog", (msg: DialogMessage) => afterBattle(() => showDialog(msg.title, msg.text)));
       room.onMessage("shop", (msg: ShopMessage) => openShop(room, msg));
+      room.onMessage("gym_offer", (msg: GymOfferMessage) => openGymOffer(room, msg));
       room.onMessage("notice", (msg: NoticeMessage) => toast(msg.text));
       new BattleUI(room);
 
@@ -66,7 +76,7 @@ async function start() {
 
 function renderHud(p: ProfileMessage) {
   const lead = p.team[0];
-  document.getElementById("hud-money")!.textContent = `${p.money} Sementes`;
+  document.getElementById("hud-money")!.textContent = `${p.money} Sementes · ${p.badges.length}/8 insígnias`;
   document.getElementById("hud-team")!.innerHTML = lead
     ? `<b>${lead.name}</b> Nv. ${lead.level} · Vida ${lead.hp}/${lead.maxHp}`
     : "";

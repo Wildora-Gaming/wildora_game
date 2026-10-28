@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { TYPE_IDS, effectiveness, typeMultiplier } from "../../shared/battle/types";
 import { SPECIES } from "../../shared/battle/data";
 import {
+  chooseTrainerAction,
   awardExperience,
   catchChance,
   evolveIfReady,
@@ -230,6 +231,47 @@ test("XP é dividido entre quem participou e está de pé", () => {
   const ev = awardExperience(state);
   const xp = ev.filter((e) => e.t === "xp");
   assert.equal(xp.length, 2);
+});
+
+test("treinador: manda a próxima criatura, XP a cada uma, vitória só no fim", () => {
+  const hero = createCreature("flambo", 30);
+  const a = createCreature("sprouty", 3);
+  const b = createCreature("pawly", 3);
+  const state = startBattle([hero], [a, b], false);
+  const e1 = resolveTurn(state, { kind: "move", moveIndex: hero.moves.indexOf("labareda") }, { kind: "move", moveIndex: 0 }, fixed(0.5));
+  const kinds1 = e1.map((e) => e.t);
+  assert.ok(kinds1.includes("faint") && kinds1.includes("xp") && kinds1.includes("foe_switch"), kinds1.join(","));
+  assert.equal(state.result, null);
+  assert.equal(state.foe, b);
+  const e2 = resolveTurn(state, { kind: "move", moveIndex: hero.moves.indexOf("labareda") }, { kind: "move", moveIndex: 0 }, fixed(0.5));
+  assert.equal(state.result, "win");
+  assert.equal(e2.at(-1)?.t, "end");
+  assert.ok(e2.some((e) => e.t === "xp"));
+});
+
+test("treinador: sem fuga e sem Orbi", () => {
+  const state = startBattle([createCreature("leafin", 5)], [createCreature("pawly", 5)], false);
+  assert.equal(isValidAction(state, { kind: "run" }), false);
+  assert.equal(isValidAction(state, { kind: "item", itemId: "orbi" }), false);
+});
+
+test("treinador esperto escolhe o golpe super efetivo", () => {
+  const foe = createCreature("aquari", 20); // Investida, Jato d'Água, Mordida Firme, Onda
+  const state = startBattle([createCreature("flambo", 20)], [foe], false);
+  const a = chooseTrainerAction(state, fixed(0), 1) as { kind: "move"; moveIndex: number };
+  assert.equal(foe.moves[a.moveIndex], "onda");
+});
+
+test("evolução só acontece no fim da batalha", () => {
+  const hero = createCreature("leafin", 15);
+  hero.xp = 16 ** 3 - 1;
+  const state = startBattle([hero], [createCreature("pawly", 10), createCreature("pawly", 10)], false);
+  resolveTurn(state, { kind: "move", moveIndex: 0 }, { kind: "move", moveIndex: 0 }, () => 0.5);
+  for (let i = 0; i < 30 && !state.result; i++) {
+    resolveTurn(state, { kind: "move", moveIndex: 0 }, { kind: "move", moveIndex: 0 }, () => 0.5);
+    if (state.result === null) assert.equal(hero.speciesId, "leafin", "não evolui no meio");
+  }
+  if (state.result === "win") assert.equal(hero.speciesId, "leafox");
 });
 
 console.log(`\n${passed} verificações passaram.\n`);

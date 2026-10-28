@@ -41,13 +41,16 @@ Andar contra a porta do Centro de Cura (telhado vermelho) ou da Loja (telhado az
 - **Criador de personagem** com prévia ao vivo: pele, 7 cabelos, 4 olhos, 4 roupas, 3 partes de
   baixo, 3 chapéus e paletas de cor. Os outros jogadores veem o seu visual.
 - **3 iniciais** (Leafin, Flambo, Aquari) e **25 criaturas**, com evoluções nos níveis 16/32 e 18/36.
-- **Mundo 96×72** com a Vila Broto, 4 zonas de grama alta com criaturas e níveis próprios
+- **Mundo 96×96** com a Vila Broto, 4 zonas de grama alta com criaturas e níveis próprios
   (Campina Norte, Campos do Leste, Pradaria Sul, Orla do Bosque), Lago Espelho e bosque.
 - **Batalha por turnos** decidida no servidor: 8 tipos, mesmo tipo ×1,5, críticos, precisão,
   prioridade, 5 estados, fuga, troca de criatura, itens e troca forçada quando alguém desmaia.
 - **Captura com Orbi** (Orbi, Orbi Prata, Orbi Ouro), chance maior com Vida baixa e estados.
 - **XP dividido** entre quem lutou, subida de nível, golpes novos e **evolução**.
 - **Time de até 6** e caixa ilimitada; ordem do time e líder configuráveis.
+- **8 ginásios** (um de cada tipo) no Distrito dos Ginásios, ao sul da vila: em cada um você
+  enfrenta 2 treinadores e o líder em sequência, sem curar no meio. Vencer o líder dá a insígnia
+  e itens; treinadores trocam de criatura e escolhem golpes com estratégia.
 - **Centro de Cura**, **Loja** (Orbis e Poções) e **Sementes** ganhas em batalha.
 - **Ciclo dia/noite** (20 min, 6 de noite): à noite aparecem Shado e Batto.
 - Multiplayer em tempo real com chat; quem está em batalha mostra um "!".
@@ -82,6 +85,7 @@ shared/                    regras compartilhadas (cliente e servidor importam da
   map.ts                   mapa com a Vila Broto, objetos, colisão e busca de caminho
   creatures.ts             zonas e criaturas selvagens
   items.ts                 itens, loja e recompensas
+  gyms.ts                  ginásios: treinadores, líderes, times e prêmios
   avatar/look.ts           opções e cores do personagem, validação
   avatar/compose.ts        monta os pixels do personagem a partir dos moldes
   battle/types.ts          8 tipos e tabela de efetividade
@@ -124,7 +128,6 @@ tools/creatures/           gerador da pixel art das criaturas (referências + sc
 ## Próximos passos sugeridos
 
 - Trocas entre jogadores e batalha PvP (sala própria usando o mesmo motor)
-- Treinadores NPC e o primeiro Guardião (insígnia)
 - Segundo bioma e mapas feitos no Tiled
 - Sons e música
 - Postgres quando o número de jogadores crescer

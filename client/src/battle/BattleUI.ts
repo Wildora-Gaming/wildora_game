@@ -11,6 +11,9 @@ import { describeEvent, type BattleNames } from "../../../shared/battle/text";
 import { getItem } from "../../../shared/items";
 import type { Action, BattleEvent, CreatureView, Side } from "../../../shared/battle/engine";
 import type { BattleStartMessage, BattleTurnMessage } from "../../../shared/constants";
+import { AVATAR_H, AVATAR_W } from "../../../shared/avatar/compose";
+import { parseLook } from "../../../shared/avatar/look";
+import { drawAvatar } from "../avatar/sheet";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const TEXT_MS = 1100;
@@ -36,6 +39,10 @@ export class BattleUI {
   private foe!: CreatureView;
   private bag: Record<string, number> = {};
   private wild = true;
+  private trainer: BattleStartMessage["trainer"];
+  private foeCount = 1;
+  private foeLeft = 1;
+  private foeBalls!: HTMLElement;
   private needSwitch = false;
   private orb: HTMLElement | null = null;
   private queue: Promise<void> = Promise.resolve();
@@ -68,7 +75,7 @@ export class BattleUI {
   }
 
   private get names(): BattleNames {
-    return { player: this.player?.name ?? "", foe: this.foe?.name ?? "" };
+    return { player: this.player?.name ?? "", foe: this.foe?.name ?? "", trainer: this.trainer?.name };
   }
 
   // ---------- Montagem ----------
@@ -80,6 +87,9 @@ export class BattleUI {
     this.active = msg.active;
     this.foe = msg.foe;
     this.wild = msg.wild;
+    this.trainer = msg.trainer;
+    this.foeCount = msg.foeCount ?? 1;
+    this.foeLeft = this.foeCount;
     this.needSwitch = false;
     this.bag = uiState.profile?.bag ?? {};
 
@@ -91,7 +101,18 @@ export class BattleUI {
     this.renderSide("foe", msg.foe);
     this.renderSide("player", this.player);
     const zone = el("div", "zone-tag", msg.zone);
-    this.field.append(zone);
+    this.foeBalls = el("div", "foe-balls");
+    this.field.append(zone, this.foeBalls);
+    this.renderFoeBalls();
+    if (this.trainer) {
+      const portrait = el("div", "trainer-portrait");
+      const c = document.createElement("canvas");
+      c.width = AVATAR_W * 4;
+      c.height = AVATAR_H * 4;
+      drawAvatar(c.getContext("2d")!, parseLook(this.trainer.look), "down", "stand", 0, 0, 4);
+      portrait.append(c, el("span", "", `${this.trainer.title} ${this.trainer.name}`));
+      this.field.append(portrait);
+    }
 
     const panel = el("div", "battle-panel");
     this.message = el("div", "battle-message");
@@ -102,7 +123,12 @@ export class BattleUI {
     this.root.hidden = false;
 
     this.setBusy(true);
-    await this.say(`Um ${msg.foe.name} selvagem apareceu!`);
+    if (this.trainer) {
+      await this.say(`${this.trainer.title} ${this.trainer.name} quer batalhar!`);
+      await this.say(`${this.trainer.name} mandou ${msg.foe.name}!`, 900);
+    } else {
+      await this.say(`Um ${msg.foe.name} selvagem apareceu!`);
+    }
     await this.say(`Vai, ${this.player.name}!`, 800);
     this.showMainMenu();
   }
@@ -137,6 +163,23 @@ export class BattleUI {
     }
     this.field.append(fighter, info);
     return view;
+  }
+
+  private renderFoeBalls() {
+    if (!this.foeBalls) return;
+    this.foeBalls.hidden = this.wild;
+    this.foeBalls.replaceChildren(
+      ...Array.from({ length: this.foeCount }, (_, i) => el("span", i < this.foeLeft ? "ball" : "ball out")),
+    );
+  }
+
+  /** Troca a criatura inimiga em campo (treinador mandou a próxima). */
+  private replaceFoe(c: CreatureView) {
+    const old = this.sides.foe;
+    old.fighter.remove();
+    old.name.closest(".info")?.remove();
+    this.sides.foe = this.buildSide("foe", c);
+    this.renderSide("foe", c);
   }
 
   /** Troca a criatura do jogador em campo (arte e caixa de informação). */
@@ -284,6 +327,16 @@ export class BattleUI {
       }
       case "faint":
         this.sides[e.side].fighter.classList.add("fainted");
+        if (e.side === "foe" && !this.wild) {
+          this.foeLeft = Math.max(0, this.foeLeft - 1);
+          this.renderFoeBalls();
+        }
+        break;
+      case "foe_switch":
+        this.foe = e.view;
+        this.foeLeft = e.left;
+        this.renderFoeBalls();
+        this.replaceFoe(e.view);
         break;
       case "status":
         this.setStatus(e.side, e.status);

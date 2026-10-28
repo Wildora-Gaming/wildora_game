@@ -19,12 +19,15 @@ import {
   type BattleTurnMessage,
   type ChatBroadcast,
   type DialogMessage,
+  type GymOfferMessage,
   type NoticeMessage,
   type ProfileMessage,
   type ShopMessage,
 } from "../../../shared/constants";
 import { HEAL_POINT, SPAWN, Tile, doorOf, isWalkable, objectAt, tileAt } from "../../../shared/map";
 import { rollWild, zoneAt } from "../../../shared/creatures";
+import { getGym, gymStages, type Gym } from "../../../shared/gyms";
+import { TYPE_LABEL } from "../../../shared/battle/types";
 import { sanitizeLook } from "../../../shared/avatar/look";
 import { STARTERS, STARTER_LEVEL, getSpecies, isSpeciesId } from "../../../shared/battle/data";
 import { SHOP_ITEMS, STARTING_BAG, STARTING_MONEY, getItem, moneyReward } from "../../../shared/items";
@@ -32,6 +35,7 @@ import {
   activeOf,
   awardExperience,
   calcStats,
+  chooseTrainerAction,
   chooseWildAction,
   createCreature,
   healFully,
@@ -61,6 +65,8 @@ interface Session {
   lastActionAt: number;
   battle: BattleState | null;
   battleZone: string;
+  /** desafio de ginásio em andamento: qual treinador está sendo enfrentado */
+  gymRun: { gymId: string; stage: number } | null;
 }
 
 const PLAYER_COLORS = [0xe4572e, 0x17bebb, 0xffc914, 0x76b041, 0x9b5de5, 0xf15bb5, 0x00bbf9, 0xfee440];
@@ -109,6 +115,7 @@ export class WorldRoom extends Room<WorldState> {
     this.onMessage("team_order", (client, m: unknown) => this.handleTeamOrder(client, m));
     this.onMessage("box_deposit", (client, m: unknown) => this.handleBox(client, m, "deposit"));
     this.onMessage("box_withdraw", (client, m: unknown) => this.handleBox(client, m, "withdraw"));
+    this.onMessage("gym_challenge", (client, m: unknown) => this.handleGymChallenge(client, m));
     this.onMessage("*", () => {});
   }
 
@@ -136,6 +143,7 @@ export class WorldRoom extends Room<WorldState> {
         box: [],
         dex: { seen: [starter], caught: [starter] },
         stats: { wins: 0, caught: 0 },
+        badges: [],
       });
       this.store.flush();
       return trainer;
@@ -163,6 +171,7 @@ export class WorldRoom extends Room<WorldState> {
       lastActionAt: 0,
       battle: null,
       battleZone: "",
+      gymRun: null,
     });
     trainer.lastSeen = Date.now();
     this.sendProfile(client);
@@ -204,6 +213,7 @@ export class WorldRoom extends Room<WorldState> {
       team: t.team.map((c) => toView(c)),
       box: t.box.map((c) => toView(c)),
       dex: { seen: t.dex.seen.length, caught: t.dex.caught.length },
+      badges: t.badges,
     };
     client.send("profile", msg);
   }
@@ -285,6 +295,7 @@ export class WorldRoom extends Room<WorldState> {
     if (!s.trainer.dex.seen.includes(wild.speciesId)) s.trainer.dex.seen.push(wild.speciesId);
     const msg: BattleStartMessage = {
       wild: true,
+      foeCount: 1,
       team: s.trainer.team.map((c) => toView(c)),
       active: s.battle.active,
       foe: toView(wild, false),
@@ -314,8 +325,11 @@ export class WorldRoom extends Room<WorldState> {
       if (s.trainer.bag[message.itemId] <= 0) delete s.trainer.bag[message.itemId];
     }
 
-    const events: BattleEvent[] = resolveTurn(battle, message, chooseWildAction(battle, this.rng), this.rng);
+    const stage = s.gymRun ? gymStages(getGym(s.gymRun.gymId)!)[s.gymRun.stage] : null;
+    const foeAction = battle.wild ? chooseWildAction(battle, this.rng) : chooseTrainerAction(battle, this.rng, stage?.smart);
+    const events: BattleEvent[] = resolveTurn(battle, message, foeAction, this.rng);
     const t = s.trainer;
+    let next: (() => void) | null = null;
 
     if (battle.result === "win" || battle.result === "caught") {
       const end = events.pop()!;
@@ -336,12 +350,15 @@ export class WorldRoom extends Room<WorldState> {
       } else {
         t.stats.wins += 1;
       }
-      events.push(...awardExperience(battle));
-      const money = moneyReward(battle.foe.level);
+      // a vitória já trouxe o XP do motor; a captura ganha XP aqui
+      if (battle.result === "caught") events.push(...awardExperience(battle));
+      const money = stage ? stage.reward : moneyReward(battle.foe.level);
       t.money += money;
       events.push({ t: "money", amount: money });
       events.push(end);
+      if (s.gymRun && battle.result === "win") next = this.advanceGym(client, player, s);
     } else if (battle.result === "lose") {
+      s.gymRun = null;
       // Volta ao Centro de Cura com o time recuperado e perde um pouco de Sementes.
       for (const c of t.team) healFully(c);
       t.money = Math.max(0, t.money - Math.floor(t.money * 0.1));
@@ -374,7 +391,94 @@ export class WorldRoom extends Room<WorldState> {
       player.inBattle = false;
       this.store.markDirty();
       this.sendProfile(client);
+      next?.();
     }
+  }
+
+  // ---------- Ginásios ----------
+
+  private sendGymOffer(client: Client, s: Session, gym: Gym) {
+    const msg: GymOfferMessage = {
+      gymId: gym.id,
+      name: gym.name,
+      type: TYPE_LABEL[gym.type],
+      badge: gym.badge,
+      level: gym.level,
+      leader: gym.leader.name,
+      quote: gym.quote,
+      trainers: gym.trainers.length,
+      hasBadge: s.trainer.badges.includes(gym.id),
+      badges: s.trainer.badges.length,
+    };
+    client.send("gym_offer", msg);
+  }
+
+  private handleGymChallenge(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r || r.s.battle) return;
+    const { s, player } = r;
+    const gym = getGym((message as { gymId?: unknown } | null)?.gymId);
+    if (!gym) return;
+    // precisa estar na porta do ginásio
+    const near = [[0, -1], [0, 0], [-1, 0], [1, 0]].some(([dx, dy]) => {
+      const o = objectAt(player.x + dx, player.y + dy);
+      return o?.kind === "gym" && o.gymId === gym.id;
+    });
+    if (!near) return;
+    if (!s.trainer.team.some((c) => c.hp > 0)) return this.notice(client, "Seu time precisa se recuperar no Centro de Cura antes.");
+    s.gymRun = { gymId: gym.id, stage: 0 };
+    this.beginTrainerBattle(client, player, s, gym, 0);
+  }
+
+  private beginTrainerBattle(client: Client, player: Player, s: Session, gym: Gym, stage: number) {
+    const trainer = gymStages(gym)[stage];
+    const foes = trainer.team.map(([species, level]) => createCreature(species, level));
+    s.battle = startBattle(s.trainer.team, foes, false);
+    s.battleZone = gym.name;
+    player.inBattle = true;
+    for (const f of foes) if (!s.trainer.dex.seen.includes(f.speciesId)) s.trainer.dex.seen.push(f.speciesId);
+    const msg: BattleStartMessage = {
+      wild: false,
+      trainer: { name: trainer.name, title: trainer.title, look: trainer.look },
+      foeCount: foes.length,
+      team: s.trainer.team.map((c) => toView(c)),
+      active: s.battle.active,
+      foe: toView(foes[0], false),
+      zone: gym.name,
+    };
+    client.send("battle_start", msg);
+  }
+
+  /** Depois de vencer um treinador do ginásio: próximo da fila ou insígnia. */
+  private advanceGym(client: Client, player: Player, s: Session): () => void {
+    const run = s.gymRun!;
+    const gym = getGym(run.gymId)!;
+    const stages = gymStages(gym);
+    if (run.stage + 1 < stages.length) {
+      run.stage += 1;
+      return () => this.beginTrainerBattle(client, player, s, gym, run.stage);
+    }
+    s.gymRun = null;
+    const t = s.trainer;
+    const first = !t.badges.includes(gym.id);
+    if (first) {
+      t.badges.push(gym.id);
+      for (const [id, n] of Object.entries(gym.prize)) t.bag[id] = (t.bag[id] ?? 0) + n;
+    }
+    return () => {
+      const prize = Object.entries(gym.prize)
+        .map(([id, n]) => `${n}× ${getItem(id)?.name ?? id}`)
+        .join(", ");
+      const msg: DialogMessage = first
+        ? {
+            title: gym.badge,
+            text: `Você venceu ${gym.leader.name}, líder do ${gym.name}, e ganhou a ${gym.badge}! Prêmio: ${prize}. Insígnias: ${t.badges.length} de 8.`,
+          }
+        : { title: gym.name, text: `Você venceu ${gym.leader.name} de novo! Já tinha a ${gym.badge}.` };
+      client.send("dialog", msg);
+      this.store.markDirty();
+      this.sendProfile(client);
+    };
   }
 
   // ---------- Vila: interações ----------
@@ -421,6 +525,18 @@ export class WorldRoom extends Room<WorldState> {
       }
     } else if (obj.kind === "house") {
       dialog("Casa", "A porta está trancada. Parece que ninguém está em casa.");
+    } else if (obj.kind === "gym" && obj.gymId) {
+      const gym = getGym(obj.gymId);
+      if (gym && ty === obj.y + obj.h - 1) this.sendGymOffer(client, s, gym);
+    } else if (obj.kind === "npc" && obj.gymId) {
+      const gym = getGym(obj.gymId)!;
+      const has = s.trainer.badges.includes(gym.id);
+      dialog(
+        `${gym.leader.name}, líder do ${gym.name}`,
+        has
+          ? `Você já tem a ${gym.badge}. Volte quando quiser uma revanche!`
+          : `${gym.quote} Entre no ginásio quando estiver pronto. Sugiro um time por volta do nível ${gym.level}.`,
+      );
     } else if (obj.kind === "sign" && obj.text) {
       dialog("Placa", obj.text);
     } else if (obj.kind === "well") {
