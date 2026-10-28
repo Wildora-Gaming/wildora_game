@@ -7,7 +7,8 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { Client, type Room } from "colyseus.js";
 import { WorldRoom } from "../src/rooms/WorldRoom";
 import { CHAT_MAX_LENGTH, MOVE_COOLDOWN_MS, ROOM_NAME } from "../../shared/constants";
-import { MAP_HEIGHT, MAP_TILES, MAP_WIDTH, SPAWN, Tile, tileAt } from "../../shared/map";
+import { MAP_HEIGHT, MAP_TILES, MAP_WIDTH, SPAWN, Tile, findPath, isWalkable, tileAt } from "../../shared/map";
+import { encodeLook, parseLook } from "../../shared/avatar/look";
 
 const PORT = 2599;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -31,6 +32,16 @@ function seeded(seed: number) {
 }
 
 const me = (room: Room) => room.state.players.get(room.sessionId);
+
+/** Segue um caminho de tiles adjacentes, um passo por vez. */
+async function walkPath(room: Room, path: { x: number; y: number }[]) {
+  for (const step of path) {
+    const p = me(room);
+    const dir = step.x > p.x ? "right" : step.x < p.x ? "left" : step.y > p.y ? "down" : "up";
+    room.send("move", { dir });
+    await sleep(STEP);
+  }
+}
 
 async function walk(room: Room, dir: string, steps: number) {
   for (let i = 0; i < steps; i++) {
@@ -56,7 +67,7 @@ async function main() {
   await gameServer.listen(PORT);
 
   const url = `ws://localhost:${PORT}`;
-  const a = await new Client(url).joinOrCreate(ROOM_NAME, { name: "Ana", starter: "flambo" });
+  const a = await new Client(url).joinOrCreate(ROOM_NAME, { name: "Ana", starter: "flambo", look: "3.4.4.1.2.2.5.2.3.9.2.7" });
   const chatB: any[] = [];
   const battleStarts: any[] = [];
   const turns: any[] = [];
@@ -67,7 +78,7 @@ async function main() {
   a.onMessage("team", (m) => teamA.push(m));
   a.onMessage("chat", () => {});
 
-  const b = await new Client(url).joinOrCreate(ROOM_NAME, { name: "Beto<script>", starter: "hacker" });
+  const b = await new Client(url).joinOrCreate(ROOM_NAME, { name: "Beto<script>", starter: "hacker", look: "99.x.-1" });
   b.onMessage("chat", (m) => chatB.push(m));
   b.onMessage("team", (m) => teamB.push(m));
   b.onMessage("battle_start", () => {});
@@ -79,6 +90,10 @@ async function main() {
 
   assert.equal(me(b).name, "Betoscript");
   ok("nome sanitizado no servidor");
+
+  assert.equal(b.state.players.get(a.sessionId)?.look, "3.4.4.1.2.2.5.2.3.9.2.7");
+  assert.equal(me(b).look, encodeLook(parseLook("")), "aparência inválida vira o padrão");
+  ok("aparência do personagem sincronizada e validada");
 
   assert.deepEqual([me(a).x, me(a).y], [SPAWN.x, SPAWN.y]);
   a.send("move", { dir: "right" });
@@ -98,13 +113,15 @@ async function main() {
   assert.deepEqual([me(a).x, me(a).y], [SPAWN.x, SPAWN.y]);
   ok("mensagens inválidas ignoradas sem derrubar a sala");
 
-  await walk(a, "up", SPAWN.y + 3); // passa do topo de propósito
-  assert.equal(me(a).y, 1);
+  // Anda para o norte pela estrada até bater no poço da praça e tenta atravessar
+  await walk(a, "up", 8);
+  assert.ok(!isWalkable(me(a).x, me(a).y - 1), `deveria ter parado antes de um obstáculo (${me(a).x},${me(a).y})`);
+  assert.ok(isWalkable(me(a).x, me(a).y));
   assert.equal(me(a).dir, "up");
-  ok("colisão com a borda de árvores");
+  ok(`colisão com objetos do mapa (parou em ${me(a).x},${me(a).y})`);
 
   // Volta ao spawn
-  await walk(a, "down", SPAWN.y - 1);
+  await walkPath(a, findPath(me(a), (x, y) => x === SPAWN.x && y === SPAWN.y)!);
   assert.deepEqual([me(a).x, me(a).y], [SPAWN.x, SPAWN.y]);
 
   // Chat
@@ -127,8 +144,12 @@ async function main() {
   // Encontro forçado: RNG = 0 sempre dispara
   const room = matchMaker.getLocalRoomById(a.roomId) as WorldRoom;
   room.rng = () => 0;
-  await walk(a, "left", SPAWN.x - 10);
-  await walk(a, "down", 18 - SPAWN.y);
+  const route = findPath(me(a), (x, y) => tileAt(x, y) === Tile.TallGrass)!;
+  assert.ok(route, "precisa existir caminho até a grama alta");
+  room.rng = () => 0.99; // sem encontro no caminho
+  await walkPath(a, route.slice(0, -1));
+  room.rng = () => 0; // encontro garantido no último passo
+  await walkPath(a, route.slice(-1));
   assert.equal(tileAt(me(a).x, me(a).y), Tile.TallGrass);
   await waitFor(() => battleStarts.length === 1, "batalha começar");
   room.rng = seeded(42);
@@ -169,8 +190,12 @@ async function main() {
   // Fuga
   room.rng = () => 0;
   const nBattles = battleStarts.length;
-  await walk(a, "up", 1);
-  await walk(a, "down", 1);
+  const back = route.at(-2) ?? SPAWN;
+  const grassTile = { x: me(a).x, y: me(a).y };
+  room.rng = () => 0.99;
+  await walkPath(a, [back]);
+  room.rng = () => 0;
+  await walkPath(a, [grassTile]);
   await waitFor(() => battleStarts.length > nBattles, "segundo encontro");
   const nTurns = turns.length;
   a.send("battle_action", { kind: "run" });

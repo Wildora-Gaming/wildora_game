@@ -17,6 +17,7 @@ import {
 } from "../../../shared/constants";
 import { SPAWN, Tile, isWalkable, tileAt } from "../../../shared/map";
 import { ZONE_CAMPINA_INICIAL, rollWild } from "../../../shared/creatures";
+import { sanitizeLook } from "../../../shared/avatar/look";
 import { STARTERS, STARTER_LEVEL, isSpeciesId } from "../../../shared/battle/data";
 import {
   chooseWildAction,
@@ -36,6 +37,7 @@ import {
 interface JoinOptions {
   name?: unknown;
   starter?: unknown;
+  look?: unknown;
 }
 
 // Dados por conexão que não vão para o estado público.
@@ -77,7 +79,9 @@ export class WorldRoom extends Room<WorldState> {
   onJoin(client: Client, options: JoinOptions = {}) {
     const name = sanitizeName(options.name);
     const color = PLAYER_COLORS[this.state.players.size % PLAYER_COLORS.length];
-    this.state.players.set(client.sessionId, Player.create(name, SPAWN.x, SPAWN.y, color));
+    const player = Player.create(name, SPAWN.x, SPAWN.y, color);
+    player.look = sanitizeLook(options.look);
+    this.state.players.set(client.sessionId, player);
 
     const starter =
       isSpeciesId(options.starter) && STARTERS.includes(options.starter) ? options.starter : STARTERS[0];
@@ -90,7 +94,7 @@ export class WorldRoom extends Room<WorldState> {
     });
 
     this.sendTeam(client);
-    this.broadcastSystem(`${name} entrou na Campina Inicial.`);
+    this.broadcastSystem(`${name} chegou à Vila Broto.`);
   }
 
   onLeave(client: Client) {

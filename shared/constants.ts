@@ -3,7 +3,7 @@ import type { BattleEvent, CreatureView } from "./battle/engine";
 // Constantes compartilhadas entre cliente e servidor.
 // Tudo que define regra de jogo mora aqui, para os dois lados nunca divergirem.
 
-export const TILE_SIZE = 32;
+export const TILE_SIZE = 16;
 
 /** Tempo mínimo entre dois passos de um jogador (ms). O servidor impõe isso. */
 export const MOVE_COOLDOWN_MS = 160;

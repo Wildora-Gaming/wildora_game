@@ -1,11 +1,11 @@
 # Sprites das criaturas
 
-Coloque aqui um PNG por espécie, com o id da espécie como nome:
+Um PNG por espécie, com fundo transparente, nomeado pelo id: `leafin.png`, `zappi.png`...
 
-- `leafin.png` — de frente (inimigos, tela de login)
-- `leafin_back.png` — de costas (sua criatura na batalha). Opcional: sem ele, usa o de frente.
+Os arquivos atuais foram recortados da folha de referência do Wildora. Para trocar a arte de
+uma criatura, basta substituir o PNG com o mesmo nome. Na batalha, a sua criatura aparece
+espelhada (olhando para o inimigo).
 
-Ids atuais: leafin, flambo, aquari, pawly, chirpy, rocky, zappi, shado.
-
-Fundo transparente, pixel art. O jogo escala sem suavizar (image-rendering: pixelated),
-então 64x64 ou 96x96 funcionam bem. Sem arquivo, aparece uma forma provisória na cor do tipo.
+Ids: leafin, leafox, leafaurus, flambo, flamber, flamberus, aquari, aquarel, aquarion,
+zappi, zapix, zaptor, rocky, rockor, rockolos, pawly, chirpy, shado, baleo, batto,
+sprouty, woolly, zebri, shroomy, fluffi.

@@ -1,64 +1,258 @@
-// Mapa de teste "Campina Inicial".
-// Gerado por código para o esqueleto; mais adiante isso vira um mapa do Tiled (.tmj)
-// lido pelos dois lados.
+// Mapa "Campina Inicial" com a Vila Broto no centro.
+// Gerado por código de forma determinística: cliente e servidor chegam ao mesmo mundo.
+// Duas camadas: o chão (um tipo por tile) e objetos (árvores, casas, pedras...) que bloqueiam
+// a área da base e podem ser desenhados mais altos que ela.
 
 export enum Tile {
-  Ground = 0,
-  Tree = 1,
+  Grass = 0,
+  Path = 1,
   TallGrass = 2,
   Water = 3,
-  Path = 4,
+  Sand = 4,
+  Flowers = 5,
 }
 
-export const MAP_WIDTH = 40;
-export const MAP_HEIGHT = 28;
+export type ObjectKind = "tree" | "pine" | "house" | "rock" | "fence" | "lamp" | "sign" | "bush" | "well";
 
-export const SPAWN = { x: 20, y: 13 };
+export interface MapObject {
+  kind: ObjectKind;
+  /** canto superior esquerdo da área que bloqueia (em tiles) */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** variação visual (cor do telhado etc.) */
+  variant: number;
+}
 
-function buildMap(): Tile[] {
-  const tiles: Tile[] = new Array(MAP_WIDTH * MAP_HEIGHT).fill(Tile.Ground);
+export const MAP_WIDTH = 96;
+export const MAP_HEIGHT = 72;
+
+export const SPAWN = { x: 47, y: 37 };
+
+/** Tamanho da área bloqueada de cada objeto. */
+const FOOTPRINT: Record<ObjectKind, [number, number]> = {
+  tree: [2, 1],
+  pine: [1, 1],
+  house: [5, 3],
+  rock: [1, 1],
+  fence: [1, 1],
+  lamp: [1, 1],
+  sign: [1, 1],
+  bush: [1, 1],
+  well: [2, 1],
+};
+
+function mulberry32(seed: number) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function buildWorld() {
+  const W = MAP_WIDTH;
+  const H = MAP_HEIGHT;
+  const rng = mulberry32(20261028);
+  const ground: Tile[] = new Array(W * H).fill(Tile.Grass);
+  const blocked: boolean[] = new Array(W * H).fill(false);
+  const objects: MapObject[] = [];
+
+  const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H;
+  const get = (x: number, y: number) => ground[y * W + x];
   const set = (x: number, y: number, t: Tile) => {
-    if (x >= 0 && y >= 0 && x < MAP_WIDTH && y < MAP_HEIGHT) tiles[y * MAP_WIDTH + x] = t;
+    if (inside(x, y)) ground[y * W + x] = t;
   };
   const rect = (x: number, y: number, w: number, h: number, t: Tile) => {
     for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) set(i, j, t);
   };
+  const ellipse = (cx: number, cy: number, rx: number, ry: number, t: Tile) => {
+    for (let j = Math.floor(cy - ry); j <= cy + ry; j++)
+      for (let i = Math.floor(cx - rx); i <= cx + rx; i++)
+        if (((i - cx) / rx) ** 2 + ((j - cy) / ry) ** 2 <= 1) set(i, j, t);
+  };
+  const blob = (cx: number, cy: number, rx: number, ry: number, t: Tile) => {
+    // forma orgânica: elipse com borda irregular
+    for (let j = Math.floor(cy - ry - 1); j <= cy + ry + 1; j++)
+      for (let i = Math.floor(cx - rx - 1); i <= cx + rx + 1; i++) {
+        const d = ((i - cx) / rx) ** 2 + ((j - cy) / ry) ** 2;
+        if (d <= 1 - 0.18 + rng() * 0.36) set(i, j, t);
+      }
+  };
 
-  // Grama alta (onde acontecem os encontros)
-  rect(4, 3, 9, 7, Tile.TallGrass);
-  rect(26, 16, 10, 8, Tile.TallGrass);
-  rect(3, 18, 8, 6, Tile.TallGrass);
+  // --- Grama alta: campinas ---
+  blob(19, 15, 8, 6, Tile.TallGrass);
+  blob(70, 53, 9, 6, Tile.TallGrass);
+  blob(21, 52, 7, 5, Tile.TallGrass);
+  blob(76, 31, 6, 3, Tile.TallGrass);
+  blob(30, 26, 4, 3, Tile.TallGrass);
 
-  // Lago
-  rect(23, 3, 9, 5, Tile.Water);
-  rect(24, 8, 7, 1, Tile.Water);
+  // --- Lago com areia ---
+  ellipse(73, 14, 13, 7.5, Tile.Sand);
+  blob(73, 14, 11, 6, Tile.Water);
+  ellipse(14, 34, 3.5, 2.5, Tile.Sand);
+  ellipse(14, 34, 2.5, 1.6, Tile.Water);
 
-  // Bosques internos (obstáculos)
-  rect(14, 19, 4, 3, Tile.Tree);
-  rect(34, 4, 3, 3, Tile.Tree);
-  rect(15, 4, 2, 2, Tile.Tree);
+  // --- Estradas ---
+  rect(5, 36, W - 10, 2, Tile.Path); // leste-oeste
+  rect(47, 5, 2, H - 10, Tile.Path); // norte-sul
+  rect(40, 31, 16, 12, Tile.Path); // praça
+  rect(62, 14 + 8, 2, 14, Tile.Path); // ramal até o lago
+  rect(62, 21, 6, 2, Tile.Path);
+  rect(19, 22, 2, 14, Tile.Path); // ramal até a campina oeste
 
-  // Caminhos em cruz passando pelo spawn
-  rect(1, SPAWN.y, MAP_WIDTH - 2, 1, Tile.Path);
-  rect(SPAWN.x, 1, 1, MAP_HEIGHT - 2, Tile.Path);
+  // --- Flores ---
+  for (let k = 0; k < 260; k++) {
+    const x = Math.floor(rng() * W);
+    const y = Math.floor(rng() * H);
+    if (get(x, y) === Tile.Grass) set(x, y, Tile.Flowers);
+  }
+  // canteiros da praça
+  for (const [x, y] of [
+    [41, 32], [42, 32], [53, 32], [54, 32], [41, 41], [42, 41], [53, 41], [54, 41],
+  ]) set(x, y, Tile.Flowers);
 
-  // Borda de árvores
-  rect(0, 0, MAP_WIDTH, 1, Tile.Tree);
-  rect(0, MAP_HEIGHT - 1, MAP_WIDTH, 1, Tile.Tree);
-  rect(0, 0, 1, MAP_HEIGHT, Tile.Tree);
-  rect(MAP_WIDTH - 1, 0, 1, MAP_HEIGHT, Tile.Tree);
+  const free = (x: number, y: number, w: number, h: number, margin = 0) => {
+    for (let j = y - margin; j < y + h + margin; j++)
+      for (let i = x - margin; i < x + w + margin; i++) {
+        if (!inside(i, j)) return false;
+        if (blocked[j * W + i]) return false;
+      }
+    for (let j = y; j < y + h; j++)
+      for (let i = x; i < x + w; i++) {
+        const t = get(i, j);
+        if (t !== Tile.Grass && t !== Tile.Flowers) return false;
+      }
+    return true;
+  };
+  const nearPath = (x: number, y: number, w: number, h: number, d: number) => {
+    for (let j = y - d; j < y + h + d; j++)
+      for (let i = x - d; i < x + w + d; i++) if (inside(i, j) && get(i, j) === Tile.Path) return true;
+    return false;
+  };
+  const place = (kind: ObjectKind, x: number, y: number, variant = 0, force = false) => {
+    const [w, h] = FOOTPRINT[kind];
+    if (!force && !free(x, y, w, h)) return false;
+    objects.push({ kind, x, y, w, h, variant });
+    for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (inside(i, j)) blocked[j * W + i] = true;
+    return true;
+  };
 
-  return tiles;
+  // --- Vila Broto: casas ao redor da praça (porta virada para a estrada) ---
+  place("house", 41, 26, 0, true);
+  place("house", 50, 26, 1, true);
+  place("house", 41, 44, 2, true);
+  place("house", 50, 44, 3, true);
+  place("house", 33, 31, 1, true);
+  place("well", 47, 34 - 1, 0, true);
+  for (const [x, y] of [[40, 31], [55, 31], [40, 42], [55, 42]]) place("lamp", x, y, 0, true);
+  place("sign", 46, 39, 0, true);
+  // cercas dos quintais
+  for (let i = 0; i < 6; i++) {
+    place("fence", 35 + i, 29, 0, true);
+    place("fence", 57 + i, 29, 0, true);
+    place("fence", 57 + i, 46, 0, true);
+  }
+  for (let j = 0; j < 4; j++) place("fence", 62, 26 + j, 1, true);
+
+  // --- Bosque nas bordas (denso) ---
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 2) {
+      const edge = Math.min(x, y, W - 2 - x, H - 1 - y);
+      if (edge < 3 || (edge < 5 && rng() < 0.55)) {
+        const kind = rng() < 0.3 ? "pine" : "tree";
+        const ox = x + (y % 2);
+        if (kind === "tree") place("tree", ox, y, Math.floor(rng() * 3));
+        else place("pine", ox, y, 0);
+      }
+    }
+  }
+  // bosque sudoeste e nordeste
+  const grove = (cx: number, cy: number, rx: number, ry: number, density: number) => {
+    for (let y = cy - ry; y <= cy + ry; y++)
+      for (let x = cx - rx; x <= cx + rx; x++) {
+        if (((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 > 1) continue;
+        if (rng() > density) continue;
+        if (nearPath(x, y, 2, 1, 1)) continue;
+        if (rng() < 0.35) place("pine", x, y, 0);
+        else place("tree", x, y, Math.floor(rng() * 3));
+      }
+  };
+  grove(10, 62, 9, 6, 0.55);
+  grove(88, 60, 6, 7, 0.5);
+  grove(33, 8, 7, 4, 0.45);
+  grove(88, 8, 5, 5, 0.5);
+
+  // --- Árvores soltas, arbustos e pedras ---
+  for (let k = 0; k < 140; k++) {
+    const x = Math.floor(rng() * W);
+    const y = Math.floor(rng() * H);
+    if (nearPath(x, y, 2, 1, 2)) continue;
+    const r = rng();
+    if (r < 0.5) place("tree", x, y, Math.floor(rng() * 3));
+    else if (r < 0.75) place("bush", x, y, 0);
+    else place("pine", x, y, 0);
+  }
+  // zona de pedras a leste
+  for (let k = 0; k < 40; k++) {
+    const x = 80 + Math.floor(rng() * 10);
+    const y = 38 + Math.floor(rng() * 14);
+    if (!nearPath(x, y, 1, 1, 1)) place("rock", x, y, Math.floor(rng() * 2));
+  }
+
+  for (let i = 0; i < W * H; i++) if (ground[i] === Tile.Water) blocked[i] = true;
+  // garante que a estrada e o spawn fiquem sempre livres
+  blocked[SPAWN.y * W + SPAWN.x] = false;
+
+  return { ground, blocked, objects };
 }
 
-export const MAP_TILES: readonly Tile[] = buildMap();
+const WORLD = buildWorld();
+
+export const MAP_TILES: readonly Tile[] = WORLD.ground;
+export const MAP_OBJECTS: readonly MapObject[] = WORLD.objects;
+const BLOCKED: readonly boolean[] = WORLD.blocked;
 
 export function tileAt(x: number, y: number): Tile {
-  if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) return Tile.Tree;
+  if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) return Tile.Water;
   return MAP_TILES[y * MAP_WIDTH + x];
 }
 
 export function isWalkable(x: number, y: number): boolean {
-  const t = tileAt(x, y);
-  return t !== Tile.Tree && t !== Tile.Water;
+  if (x < 0 || y < 0 || x >= MAP_WIDTH || y >= MAP_HEIGHT) return false;
+  return !BLOCKED[y * MAP_WIDTH + x];
+}
+
+/** Caminho mais curto (BFS) até o primeiro tile que satisfaz `goal`. Lista de passos, sem a origem. */
+export function findPath(
+  from: { x: number; y: number },
+  goal: (x: number, y: number) => boolean,
+): { x: number; y: number }[] | null {
+  const W = MAP_WIDTH;
+  const prev = new Int32Array(W * MAP_HEIGHT).fill(-1);
+  const start = from.y * W + from.x;
+  prev[start] = start;
+  const queue = [start];
+  for (let qi = 0; qi < queue.length; qi++) {
+    const cur = queue[qi];
+    const x = cur % W;
+    const y = (cur - x) / W;
+    if (cur !== start && goal(x, y)) {
+      const path: { x: number; y: number }[] = [];
+      for (let p = cur; p !== start; p = prev[p]) path.push({ x: p % W, y: Math.floor(p / W) });
+      return path.reverse();
+    }
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      const n = ny * W + nx;
+      if (isWalkable(nx, ny) && prev[n] === -1) {
+        prev[n] = cur;
+        queue.push(n);
+      }
+    }
+  }
+  return null;
 }

@@ -70,6 +70,6 @@ export function describeEvent(e: BattleEvent, names: BattleNames, wild = true): 
     case "learn":
       return `${names.player} aprendeu ${getMove(e.moveId).name}!`;
     case "end":
-      return e.result === "lose" ? "Você correu de volta para a trilha central para recuperar o time." : null;
+      return e.result === "lose" ? "Você correu de volta para a Vila Broto para recuperar o time." : null;
   }
 }

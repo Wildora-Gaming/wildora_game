@@ -12,6 +12,8 @@ export class Player extends Schema {
   declare color: number;
   /** Em batalha: os outros veem um aviso sobre a cabeça. */
   declare inBattle: boolean;
+  /** Aparência na forma compacta (ver shared/avatar/look.ts) */
+  declare look: string;
 
   constructor() {
     super();
@@ -21,6 +23,7 @@ export class Player extends Schema {
     this.dir = "down";
     this.color = 0xffffff;
     this.inBattle = false;
+    this.look = "";
   }
 
   static create(name: string, x: number, y: number, color: number) {
@@ -39,6 +42,7 @@ defineTypes(Player, {
   dir: "string",
   color: "uint32",
   inBattle: "boolean",
+  look: "string",
 });
 
 export class WorldState extends Schema {

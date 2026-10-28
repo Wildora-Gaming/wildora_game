@@ -1,7 +1,5 @@
 // Arte das criaturas.
-// Coloque os PNGs em client/public/sprites/ com o id da espécie:
-//   leafin.png        (de frente, usado para inimigos e no login)
-//   leafin_back.png   (de costas, usado para a sua criatura na batalha; opcional)
+// Os PNGs ficam em client/public/sprites/ com o id da espécie (leafin.png, zappi.png...).
 // Enquanto um arquivo não existir, aparece uma forma provisória na cor do tipo.
 import { TYPE_COLOR, type TypeId } from "../../shared/battle/types";
 
@@ -40,7 +38,8 @@ export function creatureArt(speciesId: string, name: string, types: TypeId[], vi
   };
 
   placeholder();
-  const base = `${import.meta.env.BASE_URL}sprites/${speciesId}`;
-  tryImage(view === "back" ? [`${base}_back.png`, `${base}.png`] : [`${base}.png`]);
+  // Sem arte de costas por enquanto: do seu lado a criatura aparece espelhada, olhando para o inimigo.
+  if (view === "back") box.classList.add("mirrored");
+  tryImage([`${import.meta.env.BASE_URL}sprites/${speciesId}.png`]);
   return box;
 }

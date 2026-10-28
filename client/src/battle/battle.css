@@ -90,3 +90,4 @@
   .battle-actions, .battle-actions.moves { grid-template-columns: 1fr 1fr; }
   .info { min-width: 50%; padding: 4px 8px 6px; }
 }
+.creature-art.mirrored img { transform: scaleX(-1); }

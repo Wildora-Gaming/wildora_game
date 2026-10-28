@@ -6,7 +6,7 @@ import { ROOM_NAME } from "../../shared/constants";
 const SERVER_URL =
   import.meta.env.VITE_SERVER_URL ?? `ws://${window.location.hostname}:2567`;
 
-export async function connect(name: string, starter: string): Promise<Room> {
+export async function connect(name: string, starter: string, look: string): Promise<Room> {
   const client = new Client(SERVER_URL);
-  return client.joinOrCreate(ROOM_NAME, { name, starter });
+  return client.joinOrCreate(ROOM_NAME, { name, starter, look });
 }

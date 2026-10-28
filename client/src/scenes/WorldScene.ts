@@ -1,53 +1,57 @@
 import Phaser from "phaser";
 import { getStateCallbacks, type Room } from "colyseus.js";
-import {
-  MOVE_COOLDOWN_MS,
-  TILE_SIZE,
-  type ChatBroadcast,
-  type Direction,
-} from "../../../shared/constants";
+import { MOVE_COOLDOWN_MS, TILE_SIZE, type ChatBroadcast, type Direction } from "../../../shared/constants";
+import { MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH } from "../../../shared/map";
 import { uiState } from "../ui-state";
-import { MAP_HEIGHT, MAP_WIDTH, Tile, tileAt } from "../../../shared/map";
+import { objectArt, objectKey, renderGround } from "../world/art";
+import { ensureAvatar, frameIndex } from "../avatar/sheet";
+import { toast } from "../toast";
+
+/** Zoom da câmera: cada pixel da arte vira um bloco de N pixels na tela. */
+export const WORLD_ZOOM = 3;
 
 interface PlayerView {
   body: Phaser.GameObjects.Container;
-  facing: Phaser.GameObjects.Triangle;
-  /** Balão "!" sobre quem está em batalha */
+  sprite: Phaser.GameObjects.Sprite;
   battleIcon: Phaser.GameObjects.Container;
+  textureKey: string;
+  dir: Direction;
+  lastMoveAt: number;
+  walking: boolean;
 }
-
-const TILE_TEXTURE: Record<Tile, string> = {
-  [Tile.Ground]: "t-ground",
-  [Tile.Tree]: "t-tree",
-  [Tile.TallGrass]: "t-grass",
-  [Tile.Water]: "t-water",
-  [Tile.Path]: "t-path",
-};
-
-const FACING_ANGLE: Record<string, number> = { up: 0, right: 90, down: 180, left: 270 };
 
 export class WorldScene extends Phaser.Scene {
   private views = new Map<string, PlayerView>();
   private keys!: Record<"up" | "down" | "left" | "right" | "w" | "a" | "s" | "d", Phaser.Input.Keyboard.Key>;
   private lastMoveSent = 0;
-  private banner?: Phaser.GameObjects.Container;
 
   constructor(private room: Room) {
     super("world");
   }
 
   create() {
-    this.makeTextures();
-    this.drawMap();
+    this.drawWorld();
     this.setupInput();
     this.bindRoom();
     this.setupChat();
 
-    this.cameras.main.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE);
-    this.cameras.main.setZoom(1.5);
+    const cam = this.cameras.main;
+    cam.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE);
+    cam.setZoom(WORLD_ZOOM);
+    cam.setRoundPixels(true);
+    cam.setBackgroundColor("#2f6b35");
   }
 
   update(time: number) {
+    for (const v of this.views.values()) {
+      v.body.setDepth(v.body.y);
+      if (v.walking && time - v.lastMoveAt > MOVE_COOLDOWN_MS + 70) {
+        v.walking = false;
+        v.sprite.stop();
+        v.sprite.setFrame(frameIndex(v.dir, "stand"));
+      }
+    }
+
     if (this.isTyping() || uiState.inBattle) return;
     const dir = this.heldDirection();
     if (dir && time - this.lastMoveSent >= MOVE_COOLDOWN_MS) {
@@ -58,50 +62,16 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------- Mundo ----------
 
-  private makeTextures() {
-    const g = this.add.graphics();
-    const s = TILE_SIZE;
-    const tex = (key: string, draw: () => void) => {
-      g.clear();
-      draw();
-      g.generateTexture(key, s, s);
-    };
+  private drawWorld() {
+    this.textures.addCanvas("ground", renderGround());
+    this.add.image(0, 0, "ground").setOrigin(0).setDepth(-100000);
 
-    tex("t-ground", () => {
-      g.fillStyle(0x6fbf5a).fillRect(0, 0, s, s);
-      g.fillStyle(0x7ccb66).fillRect(4, 6, 3, 3).fillRect(20, 18, 3, 3);
-    });
-    tex("t-path", () => {
-      g.fillStyle(0xd8c08a).fillRect(0, 0, s, s);
-      g.fillStyle(0xc9ae74).fillRect(6, 10, 4, 3).fillRect(22, 4, 3, 3).fillRect(14, 24, 4, 3);
-    });
-    tex("t-grass", () => {
-      g.fillStyle(0x4f9e45).fillRect(0, 0, s, s);
-      g.fillStyle(0x2f7a32);
-      for (let i = 0; i < 4; i++) {
-        const x = 3 + i * 8;
-        g.fillTriangle(x, 28, x + 3, 12, x + 6, 28);
-        g.fillTriangle(x + 2, 18, x + 5, 4, x + 8, 18);
-      }
-    });
-    tex("t-water", () => {
-      g.fillStyle(0x3a86c8).fillRect(0, 0, s, s);
-      g.fillStyle(0x6fb3e8).fillRect(4, 8, 10, 2).fillRect(18, 20, 10, 2);
-    });
-    tex("t-tree", () => {
-      g.fillStyle(0x6fbf5a).fillRect(0, 0, s, s);
-      g.fillStyle(0x7a4a24).fillRect(13, 20, 6, 10);
-      g.fillStyle(0x2b6b2e).fillCircle(16, 14, 12);
-      g.fillStyle(0x3d8a3c).fillCircle(12, 11, 6);
-    });
-    g.destroy();
-  }
-
-  private drawMap() {
-    for (let y = 0; y < MAP_HEIGHT; y++) {
-      for (let x = 0; x < MAP_WIDTH; x++) {
-        this.add.image(x * TILE_SIZE, y * TILE_SIZE, TILE_TEXTURE[tileAt(x, y)]).setOrigin(0);
-      }
+    for (const o of MAP_OBJECTS) {
+      const key = objectKey(o);
+      if (!this.textures.exists(key)) this.textures.addCanvas(key, objectArt(o));
+      const x = o.x * TILE_SIZE + (o.w * TILE_SIZE) / 2;
+      const y = (o.y + o.h) * TILE_SIZE;
+      this.add.image(x, y, key).setOrigin(0.5, 1).setDepth(y);
     }
   }
 
@@ -116,19 +86,7 @@ export class WorldScene extends Phaser.Scene {
       this.views.set(sessionId, view);
       if (online) online.textContent = String(this.room.state.players.size);
 
-      $(player).onChange(() => {
-        view.facing.setAngle(FACING_ANGLE[player.dir] ?? 180);
-        view.battleIcon.setVisible(Boolean(player.inBattle));
-        const tx = this.tileCenter(player.x);
-        const ty = this.tileCenter(player.y);
-        const far = Math.abs(tx - view.body.x) + Math.abs(ty - view.body.y) > TILE_SIZE * 1.5;
-        this.tweens.killTweensOf(view.body);
-        if (far) {
-          view.body.setPosition(tx, ty); // teleporte (ex.: voltou ao spawn após derrota)
-        } else {
-          this.tweens.add({ targets: view.body, x: tx, y: ty, duration: MOVE_COOLDOWN_MS, ease: "Linear" });
-        }
-      });
+      $(player).onChange(() => this.syncPlayer(view, player));
     });
 
     $(this.room.state).players.onRemove((_player: any, sessionId: string) => {
@@ -137,49 +95,79 @@ export class WorldScene extends Phaser.Scene {
       if (online) online.textContent = String(this.room.state.players.size);
     });
 
-    this.room.onLeave(() => {
-      this.showBanner("Conexão perdida. Recarregue a página.", 0);
-    });
+    this.room.onLeave(() => toast("Conexão perdida. Recarregue a página.", 0));
+  }
+
+  private syncPlayer(view: PlayerView, player: any) {
+    view.battleIcon.setVisible(Boolean(player.inBattle));
+
+    if (player.look) {
+      const key = ensureAvatar(this, player.look);
+      if (key !== view.textureKey) {
+        view.textureKey = key;
+        view.sprite.setTexture(key, frameIndex(view.dir, "stand"));
+      }
+    }
+
+    const dir = (player.dir as Direction) ?? "down";
+    const tx = player.x * TILE_SIZE + TILE_SIZE / 2;
+    const ty = (player.y + 1) * TILE_SIZE;
+    const dist = Math.abs(tx - view.body.x) + Math.abs(ty - view.body.y);
+
+    if (dist === 0) {
+      // só virou de lado (ou bateu num obstáculo)
+      if (dir !== view.dir) {
+        view.dir = dir;
+        if (!view.walking) view.sprite.setFrame(frameIndex(dir, "stand"));
+      }
+      return;
+    }
+
+    view.dir = dir;
+    this.tweens.killTweensOf(view.body);
+    if (dist > TILE_SIZE * 1.5) {
+      view.body.setPosition(tx, ty); // teleporte (ex.: voltou à vila após derrota)
+      view.sprite.setFrame(frameIndex(dir, "stand"));
+      return;
+    }
+    this.tweens.add({ targets: view.body, x: tx, y: ty, duration: MOVE_COOLDOWN_MS, ease: "Linear" });
+    view.lastMoveAt = this.time.now;
+    const anim = `${view.textureKey}:walk-${dir}`;
+    if (!view.walking || view.sprite.anims.currentAnim?.key !== anim) view.sprite.play(anim, true);
+    view.walking = true;
   }
 
   private createPlayerView(player: any, isMe: boolean): PlayerView {
-    const shadow = this.add.ellipse(0, 11, 20, 7, 0x000000, 0.25);
-    const body = this.add.rectangle(0, 0, 20, 22, player.color).setStrokeStyle(2, 0x1a1a1a);
-    const facing = this.add.triangle(0, 0, 0, 6, 5, -2, 10, 6, 0xffffff).setOrigin(0.5, 1.6);
-    facing.setAngle(FACING_ANGLE[player.dir] ?? 180);
+    const textureKey = ensureAvatar(this, player.look || "");
+    const dir = (player.dir as Direction) ?? "down";
+    const shadow = this.add.ellipse(0, -1, 12, 4, 0x000000, 0.22);
+    const sprite = this.add.sprite(0, 0, textureKey, frameIndex(dir, "stand")).setOrigin(0.5, 1);
+
+    // Texto desenhado em tamanho de tela e reduzido pelo zoom: fica nítido.
     const label = this.add
-      .text(0, -22, player.name, {
-        fontFamily: "system-ui, sans-serif",
-        fontSize: "11px",
-        color: isMe ? "#ffc914" : "#ffffff",
-        stroke: "#000000",
-        strokeThickness: 3,
+      .text(0, -26, player.name, {
+        fontFamily: '"Pixelify Sans", system-ui, sans-serif',
+        fontSize: "15px",
+        color: isMe ? "#ffe066" : "#ffffff",
+        stroke: "#1f1a24",
+        strokeThickness: 4,
       })
       .setOrigin(0.5, 1)
-      .setResolution(2);
+      .setScale(1 / WORLD_ZOOM);
 
-    const container = this.add.container(this.tileCenter(player.x), this.tileCenter(player.y), [
-      shadow,
-      body,
-      facing,
-      label,
-    ]);
-    container.setDepth(isMe ? 20 : 10);
-
-    const bubble = this.add.circle(0, 0, 8, 0xffffff).setStrokeStyle(2, 0x1a1a1a);
+    const bubble = this.add.circle(0, 0, 4.5, 0xffffff).setStrokeStyle(1, 0x1f1a24);
     const mark = this.add
-      .text(0, 0, "!", { fontFamily: "system-ui, sans-serif", fontSize: "12px", fontStyle: "bold", color: "#e5484d" })
+      .text(0, 0, "!", { fontFamily: "system-ui, sans-serif", fontSize: "21px", fontStyle: "bold", color: "#e5484d" })
       .setOrigin(0.5)
-      .setResolution(2);
-    const battleIcon = this.add.container(14, -24, [bubble, mark]).setVisible(Boolean(player.inBattle));
-    container.add(battleIcon);
+      .setScale(1 / WORLD_ZOOM);
+    const battleIcon = this.add.container(9, -24, [bubble, mark]).setVisible(Boolean(player.inBattle));
 
-    if (isMe) this.cameras.main.startFollow(container, true, 0.15, 0.15);
-    return { body: container, facing, battleIcon };
-  }
+    const x = player.x * TILE_SIZE + TILE_SIZE / 2;
+    const y = (player.y + 1) * TILE_SIZE;
+    const body = this.add.container(x, y, [shadow, sprite, label, battleIcon]).setDepth(y);
 
-  private tileCenter(t: number) {
-    return t * TILE_SIZE + TILE_SIZE / 2;
+    if (isMe) this.cameras.main.startFollow(body, true, 0.2, 0.2, 0, 12);
+    return { body, sprite, battleIcon, textureKey, dir, lastMoveAt: 0, walking: false };
   }
 
   // ---------- Entrada ----------
@@ -213,7 +201,7 @@ export class WorldScene extends Phaser.Scene {
     return document.activeElement?.id === "chat-input";
   }
 
-  // ---------- Chat e avisos ----------
+  // ---------- Chat ----------
 
   private setupChat() {
     const log = document.getElementById("chat-log")!;
@@ -234,7 +222,7 @@ export class WorldScene extends Phaser.Scene {
     });
 
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !this.isTyping()) {
+      if (e.key === "Enter" && !this.isTyping() && !uiState.inBattle) {
         e.preventDefault();
         this.input.keyboard!.resetKeys();
         input.focus();
@@ -252,31 +240,5 @@ export class WorldScene extends Phaser.Scene {
         input.blur();
       }
     });
-  }
-
-  private showBanner(text: string, durationMs = 2500) {
-    this.banner?.destroy();
-    const cam = this.cameras.main;
-    const label = this.add
-      .text(0, 0, text, {
-        fontFamily: "system-ui, sans-serif",
-        fontSize: "18px",
-        color: "#1a1a1a",
-        fontStyle: "bold",
-        padding: { x: 18, y: 12 },
-        backgroundColor: "#ffc914",
-      })
-      .setOrigin(0.5)
-      .setResolution(2);
-    this.banner = this.add
-      .container(cam.width / 2, 70, [label])
-      .setScrollFactor(0)
-      .setDepth(100)
-      .setScale(1 / cam.zoom);
-    // Container com scrollFactor 0 ainda sofre o zoom; compensa posição.
-    this.banner.setPosition(cam.width / 2, cam.height / 2 - cam.height / (2 * cam.zoom) + 50 / cam.zoom);
-    if (durationMs > 0) {
-      this.time.delayedCall(durationMs, () => this.banner?.destroy());
-    }
   }
 }
