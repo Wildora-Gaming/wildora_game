@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wildora</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #14161c;
+        --panel: rgba(16, 18, 24, 0.82);
+        --line: rgba(255, 255, 255, 0.12);
+        --text: #e9ecf2;
+        --muted: #9aa3b2;
+        --accent: #ffc914;
+        --pixel: "Pixelify Sans", system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+      #game { position: fixed; inset: 0; }
+
+      #login { position: fixed; inset: 0; display: grid; place-items: center; z-index: 10; padding: 16px;
+        background: radial-gradient(circle at 50% 40%, #233046 0%, var(--bg) 70%); }
+      #login form { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+        padding: 28px; width: min(420px, 100%); display: grid; gap: 14px; }
+      #login h1 { margin: 0; font-family: var(--pixel); font-size: 34px; letter-spacing: 1px; color: var(--accent); }
+      #login p { margin: 0; color: var(--muted); font-size: 14px; }
+      #login label { font-size: 13px; color: var(--muted); }
+      #login input, #chat input { width: 100%; padding: 10px 12px; border-radius: 8px;
+        border: 1px solid var(--line); background: rgba(255,255,255,0.06); color: var(--text); font-size: 15px; }
+      #login button[type="submit"] { padding: 10px; border: 0; border-radius: 8px; background: var(--accent);
+        color: #1a1a1a; font-weight: 700; font-size: 15px; cursor: pointer; }
+      #login button[type="submit"]:disabled { opacity: 0.6; cursor: wait; }
+      #login .error { color: #ff7a7a; font-size: 13px; min-height: 1em; }
+
+      .starters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .starter { display: grid; justify-items: center; gap: 6px; padding: 10px 6px 8px; cursor: pointer;
+        border-radius: 10px; border: 2px solid var(--line); background: rgba(255,255,255,0.04);
+        color: var(--text); font-family: var(--pixel); font-size: 15px; }
+      .starter small { font-family: system-ui, sans-serif; font-size: 11px; color: var(--muted); }
+      .starter[aria-pressed="true"] { border-color: var(--accent); background: rgba(255, 201, 20, 0.1); }
+      .starter .creature-art { width: 56px; height: 56px; }
+
+      #chat { position: fixed; left: 12px; bottom: 12px; width: min(380px, calc(100vw - 24px));
+        background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+        padding: 8px; display: none; flex-direction: column; gap: 6px; z-index: 5; }
+      #chat-log { height: 150px; overflow-y: auto; font-size: 13px; line-height: 1.4; }
+      #chat-log .sys { color: var(--muted); font-style: italic; }
+      #chat-log b { color: var(--accent); }
+      #hud { position: fixed; top: 12px; left: 12px; right: 12px; display: none; z-index: 5;
+        gap: 8px; flex-wrap: wrap; pointer-events: none; }
+      #hud > div { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+        padding: 6px 10px; font-size: 13px; color: var(--muted); }
+      #hud b { color: var(--text); }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+
+    <div id="login">
+      <form id="login-form">
+        <h1>Wildora</h1>
+        <p>Escolha seu nome e sua primeira criatura para entrar na Campina Inicial.</p>
+        <input id="name-input" maxlength="16" placeholder="Seu nome de treinador" autocomplete="off" autofocus />
+        <label>Criatura inicial</label>
+        <div class="starters" id="starters"></div>
+        <button type="submit">Entrar</button>
+        <div class="error" id="login-error"></div>
+      </form>
+    </div>
+
+    <div id="hud">
+      <div>Setas/WASD para andar · Enter para conversar · <span id="hud-online">0</span> online</div>
+      <div id="hud-team"></div>
+    </div>
+
+    <div id="chat">
+      <div id="chat-log"></div>
+      <input id="chat-input" maxlength="140" placeholder="Enter para conversar" autocomplete="off" />
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
