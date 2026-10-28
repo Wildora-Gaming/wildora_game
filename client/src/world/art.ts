@@ -89,8 +89,8 @@ function water(c: Ctx, ox: number, oy: number, tx: number, ty: number) {
   if (!isW(tx + 1, ty)) px(c, ox + TILE - 2, oy, foam, 2, TILE);
 }
 
-function tallGrass(c: Ctx, ox: number, oy: number, tx: number, ty: number) {
-  px(c, ox, oy, "#5aa84a", TILE, TILE);
+function tallGrass(c: Ctx, ox: number, oy: number, tx: number, ty: number, withBase = true) {
+  if (withBase) px(c, ox, oy, "#5aa84a", TILE, TILE);
   const tuft = (x: number, y: number) => {
     // moita de 7 px: contorno escuro, folhas, brilho
     const dark = "#2f7a32";
@@ -111,6 +111,19 @@ function tallGrass(c: Ctx, ox: number, oy: number, tx: number, ty: number) {
   tuft(8, 1);
   tuft(4, 8);
   tuft(11, 8 + (hash(tx, ty) < 0.5 ? 0 : 1));
+}
+
+/** Moitas da grama alta sem o fundo: desenhadas na frente das pernas de quem está nela. */
+export function grassOverlay(): HTMLCanvasElement {
+  const full = document.createElement("canvas");
+  full.width = TILE;
+  full.height = TILE;
+  tallGrass(full.getContext("2d")!, 0, 0, 0, 0, false);
+  const out = document.createElement("canvas");
+  out.width = TILE;
+  out.height = 9;
+  out.getContext("2d")!.drawImage(full, 0, 7, TILE, 9, 0, 0, TILE, 9);
+  return out;
 }
 
 export function renderGround(): HTMLCanvasElement {

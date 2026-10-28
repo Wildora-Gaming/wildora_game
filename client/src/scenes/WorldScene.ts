@@ -1,11 +1,11 @@
 import Phaser from "phaser";
 import { getStateCallbacks, type Room } from "colyseus.js";
 import { MOVE_COOLDOWN_MS, TILE_SIZE, type ChatBroadcast, type Direction } from "../../../shared/constants";
-import { MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH } from "../../../shared/map";
+import { MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH, Tile, tileAt } from "../../../shared/map";
 import { inputBlocked, uiState } from "../ui-state";
 import { openBagPanel, openTeamPanel } from "../panels/panels";
 import { areaName } from "../../../shared/creatures";
-import { objectArt, objectKey, renderGround } from "../world/art";
+import { grassOverlay, objectArt, objectKey, renderGround } from "../world/art";
 import { ensureAvatar, frameIndex } from "../avatar/sheet";
 import { toast } from "../toast";
 
@@ -16,6 +16,8 @@ interface PlayerView {
   body: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite;
   battleIcon: Phaser.GameObjects.Container;
+  /** moitas na frente das pernas quando está na grama alta */
+  grass: Phaser.GameObjects.Image;
   textureKey: string;
   dir: Direction;
   lastMoveAt: number;
@@ -113,6 +115,7 @@ export class WorldScene extends Phaser.Scene {
 
   private syncPlayer(view: PlayerView, player: any, isMe = false) {
     view.battleIcon.setVisible(Boolean(player.inBattle));
+    view.grass.setVisible(tileAt(player.x, player.y) === Tile.TallGrass);
     if (isMe) this.updateArea(player.x, player.y);
 
     if (player.look) {
@@ -188,10 +191,13 @@ export class WorldScene extends Phaser.Scene {
 
     const x = player.x * TILE_SIZE + TILE_SIZE / 2;
     const y = (player.y + 1) * TILE_SIZE;
-    const body = this.add.container(x, y, [shadow, sprite, label, battleIcon]).setDepth(y);
+    if (!this.textures.exists("grass-overlay")) this.textures.addCanvas("grass-overlay", grassOverlay());
+    const grass = this.add.image(0, 0, "grass-overlay").setOrigin(0.5, 1);
+    grass.setVisible(tileAt(player.x, player.y) === Tile.TallGrass);
+    const body = this.add.container(x, y, [shadow, sprite, grass, label, battleIcon]).setDepth(y);
 
     if (isMe) this.cameras.main.startFollow(body, true, 0.2, 0.2, 0, 12);
-    return { body, sprite, battleIcon, textureKey, dir, lastMoveAt: 0, walking: false };
+    return { body, sprite, battleIcon, grass, textureKey, dir, lastMoveAt: 0, walking: false };
   }
 
   // ---------- Entrada ----------
