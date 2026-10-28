@@ -130,61 +130,71 @@ export class PgStore extends BatchedStore {
     });
   }
 
-  /** Criaturas, mochila, dex e insígnias. */
+  /**
+   * Criaturas, mochila, dex e insígnias. Poucas consultas por salvamento (cada uma leva uma ida
+   * e volta até o banco), mandando as listas inteiras como JSON.
+   */
   private async writeDetails(tx: Db, t: Trainer) {
-    const all: [Creature, "team" | "box", number][] = [
-      ...t.team.map((c, i): [Creature, "team", number] => [c, "team", i]),
-      ...t.box.map((c, i): [Creature, "box", number] => [c, "box", i]),
-    ];
-    for (const [c, location, slot] of all) {
+    const creatures = [
+      ...t.team.map((c, slot) => ({ c, location: "team", slot })),
+      ...t.box.map((c, slot) => ({ c, location: "box", slot })),
+    ].map(({ c, location, slot }) => ({
+      id: c.uid,
+      species_id: c.speciesId,
+      level: c.level,
+      xp: c.xp,
+      hp: c.hp,
+      status: c.status,
+      status_turns: c.statusTurns,
+      moves: c.moves,
+      location,
+      slot,
+      caught_by: c.caughtBy ?? t.id,
+      caught_at: iso(c.caughtAt),
+      caught_zone: c.caughtZone ?? null,
+    }));
+    await tx.query("delete from public.creatures where owner_id = $1 and not (id = any($2::text[]))", [
+      t.id,
+      creatures.map((c) => c.id),
+    ]);
+    if (creatures.length) {
       await tx.query(
         `insert into public.creatures
            (id, owner_id, species_id, level, xp, hp, status, status_turns, moves, location, slot, caught_by, caught_at, caught_zone, updated_at)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, now())
+         select c.id, $1, c.species_id, c.level, c.xp, c.hp, c.status, c.status_turns, c.moves, c.location, c.slot,
+                c.caught_by, c.caught_at, c.caught_zone, now()
+           from jsonb_to_recordset($2::jsonb) as c(
+             id text, species_id text, level int, xp int, hp int, status text, status_turns int, moves text[],
+             location text, slot int, caught_by uuid, caught_at timestamptz, caught_zone text)
          on conflict (id) do update set
            owner_id=excluded.owner_id, species_id=excluded.species_id, level=excluded.level, xp=excluded.xp,
            hp=excluded.hp, status=excluded.status, status_turns=excluded.status_turns, moves=excluded.moves,
            location=excluded.location, slot=excluded.slot, updated_at=now()`,
-        [
-          c.uid,
-          t.id,
-          c.speciesId,
-          c.level,
-          c.xp,
-          c.hp,
-          c.status,
-          c.statusTurns,
-          c.moves,
-          location,
-          slot,
-          c.caughtBy ?? t.id,
-          iso(c.caughtAt),
-          c.caughtZone ?? null,
-        ],
+        [t.id, JSON.stringify(creatures)],
       );
     }
-    await tx.query("delete from public.creatures where owner_id = $1 and not (id = any($2::text[]))", [
-      t.id,
-      all.map(([c]) => c.uid),
-    ]);
 
+    const bag = Object.fromEntries(Object.entries(t.bag).filter(([, qty]) => qty > 0));
     await tx.query("delete from public.inventory where owner_id = $1", [t.id]);
-    for (const [item, qty] of Object.entries(t.bag)) {
-      if (qty > 0) await tx.query("insert into public.inventory (owner_id, item_id, qty) values ($1,$2,$3)", [t.id, item, qty]);
-    }
+    await tx.query(
+      `insert into public.inventory (owner_id, item_id, qty)
+       select $1, key, value::int from jsonb_each_text($2::jsonb)`,
+      [t.id, JSON.stringify(bag)],
+    );
 
-    for (const species of t.dex.seen) {
-      const caught = t.dex.caught.includes(species);
-      await tx.query(
-        `insert into public.dex (owner_id, species_id, caught_at) values ($1,$2,$3)
-         on conflict (owner_id, species_id) do update set caught_at = coalesce(public.dex.caught_at, excluded.caught_at)`,
-        [t.id, species, caught ? new Date().toISOString() : null],
-      );
-    }
+    const now = new Date().toISOString();
+    const dex = t.dex.seen.map((species) => ({ species_id: species, caught_at: t.dex.caught.includes(species) ? now : null }));
+    await tx.query(
+      `insert into public.dex (owner_id, species_id, caught_at)
+       select $1, d.species_id, d.caught_at from jsonb_to_recordset($2::jsonb) as d(species_id text, caught_at timestamptz)
+       on conflict (owner_id, species_id) do update set caught_at = coalesce(public.dex.caught_at, excluded.caught_at)`,
+      [t.id, JSON.stringify(dex)],
+    );
 
-    for (const gym of t.badges) {
-      await tx.query("insert into public.badges (owner_id, gym_id) values ($1,$2) on conflict do nothing", [t.id, gym]);
-    }
+    await tx.query(
+      `insert into public.badges (owner_id, gym_id) select $1, unnest($2::text[]) on conflict do nothing`,
+      [t.id, t.badges],
+    );
   }
 
   async close() {

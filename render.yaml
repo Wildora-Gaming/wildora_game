@@ -1,0 +1,22 @@
+# Blueprint do Render: New → Blueprint → escolha este repositório.
+# O Render pergunta os valores das variáveis marcadas com sync: false na primeira vez.
+services:
+  - type: web
+    name: wildora
+    runtime: node
+    plan: free
+    region: virginia
+    branch: main
+    buildCommand: npm ci --include=dev --no-audit --no-fund && npm run build
+    startCommand: npm run start -w server
+    healthCheckPath: /healthz
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false

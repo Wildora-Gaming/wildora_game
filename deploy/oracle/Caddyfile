@@ -1,0 +1,5 @@
+# O Caddy pega o certificado HTTPS sozinho e repassa tudo (inclusive o WebSocket) para o jogo.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy wildora:2567
+}

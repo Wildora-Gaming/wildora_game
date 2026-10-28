@@ -1,0 +1,29 @@
+# Oracle (ou qualquer VM com Docker): o jogo + Caddy na frente cuidando do HTTPS do seu domínio.
+# Uso (dentro desta pasta):  DOMAIN=jogo.seudominio.com docker compose up -d --build
+services:
+  wildora:
+    build: ../..
+    env_file: ../../.env
+    environment:
+      PORT: "2567"
+    restart: unless-stopped
+    stop_grace_period: 20s
+
+  caddy:
+    image: caddy:2
+    depends_on: [wildora]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?defina DOMAIN=jogo.seudominio.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

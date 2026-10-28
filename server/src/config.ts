@@ -31,7 +31,7 @@ export const config = {
   databaseUrl: env("DATABASE_URL"),
   supabaseUrl: env("SUPABASE_URL"),
   /** chave pública "anon" (pode ir para o navegador) */
-  supabaseAnonKey: env("SUPABASE_ANON_KEY"),
+  supabaseAnonKey: env("SUPABASE_ANON_KEY") ?? env("SUPABASE_PUBLISHABLE_KEY"),
   clientDist: resolve(root, "client/dist"),
 };
 

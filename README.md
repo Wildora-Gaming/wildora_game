@@ -19,8 +19,19 @@ página e servidor no mesmo endereço:
 npm start          # http://localhost:2567 (na rede local: http://SEU-IP:2567)
 ```
 
-O progresso fica em `server/data/wildora.json` (fora do git). Para usar outro arquivo:
-`DATA_FILE=/caminho/save.json npm start`. A porta muda com `PORT=8080`.
+Sem configurar nada, o login é local (nome de treinador + senha) e o progresso fica em
+`server/data/wildora.json` (fora do git). Para usar outro arquivo: `DATA_FILE=/caminho/save.json npm start`.
+A porta muda com `PORT=8080`.
+
+### Online, com conta de e-mail
+
+Com o Supabase configurado (`.env` ou variáveis do host, veja [`.env.example`](.env.example)), o jogo
+passa a usar **conta por e-mail** (cadastro, confirmação por e-mail, esqueci a senha) e grava o
+progresso em tabelas no Postgres: treinadores, criaturas (com quem capturou, onde, nível e XP),
+mochila, dex e insígnias.
+
+O passo a passo para colocar no ar (Supabase + Render agora; domínio próprio e Oracle depois) está em
+**[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
 ### Controles
 
@@ -37,7 +48,8 @@ Andar contra a porta do Centro de Cura (telhado vermelho) ou da Loja (telhado az
 
 ## O que tem no jogo
 
-- **Conta com senha** e progresso salvo: posição, time, caixa, mochila, Sementes e Criaturopédia.
+- **Conta por e-mail** (confirmação, esqueci a senha) e progresso salvo: posição, time, caixa,
+  mochila, Sementes, Criaturopédia e insígnias. Cada criatura guarda quem a capturou e onde.
 - **Criador de personagem** com prévia ao vivo: pele, 7 cabelos, 4 olhos, 4 roupas, 3 partes de
   baixo, 3 chapéus e paletas de cor. Os outros jogadores veem o seu visual.
 - **3 iniciais** (Leafin, Flambo, Aquari) e **25 criaturas**, com evoluções nos níveis 16/32 e 18/36.
@@ -59,7 +71,7 @@ Andar contra a porta do Centro de Cura (telhado vermelho) ou da Loja (telhado az
 ## Comandos
 
 ```bash
-npm test          # motor de batalha (19 testes) + ponta a ponta com clientes reais (19 testes)
+npm test          # motor de batalha + ponta a ponta com clientes reais + modo Supabase (Postgres em memória)
 npm run typecheck # tipos do servidor e do cliente
 npm run build     # compila o cliente em client/dist
 ```
@@ -93,13 +105,16 @@ shared/                    regras compartilhadas (cliente e servidor importam da
   battle/engine.ts         motor de batalha puro: dano, ordem, estados, itens, captura, XP
   battle/text.ts           frases dos eventos de batalha
 server/
-  src/index.ts             sobe o servidor (e serve o jogo compilado)
-  src/store.ts             contas e progresso em arquivo JSON (senha com scrypt)
+  src/index.ts             sobe o servidor (serve o jogo compilado, /config e /healthz)
+  src/config.ts            variáveis de ambiente e .env
+  src/auth.ts              login: local ou Supabase (confere o token no Supabase)
+  src/store/               progresso: arquivo JSON (modo local) ou Postgres (Supabase)
   src/rooms/WorldRoom.ts   sala do mundo: contas, movimento, batalha, vila, time, chat
   src/schema/WorldState.ts estado sincronizado (jogadores visíveis, noite)
   test/                    testes do motor e de ponta a ponta
 client/
-  src/creator/             tela inicial, criação de personagem e escolha do inicial
+  src/auth/                telas de entrar, criar conta, confirmar e-mail e trocar senha
+  src/creator/             criação de personagem e escolha do inicial
   src/scenes/WorldScene.ts mundo, jogadores animados, entrada
   src/battle/BattleUI.ts   tela de batalha (só anima o que o servidor manda)
   src/panels/              time, caixa, mochila, loja e diálogos
@@ -107,6 +122,10 @@ client/
   src/avatar/sheet.ts      folha de sprites do personagem para o Phaser
 tools/avatar/              moldes do personagem e prévia
 tools/creatures/           gerador da pixel art das criaturas (referências + script)
+supabase/schema.sql        tabelas do progresso (rodar uma vez no Supabase)
+render.yaml                publicação no Render
+Dockerfile, deploy/oracle/ imagem do jogo + Caddy (HTTPS) para a Oracle ou qualquer VM
+docs/DEPLOY.md             como colocar no ar
 ```
 
 ## Decisões de arquitetura
@@ -120,8 +139,11 @@ tools/creatures/           gerador da pixel art das criaturas (referências + sc
   andam por uma fila de tiles em velocidade constante, sem trancos.
 - **Motor de batalha puro** (`shared/battle/engine.ts`): sem rede e com RNG injetado, testado
   isoladamente. O PvE roda dentro da sala do mundo; o PvP vai usar o mesmo motor numa sala própria.
-- **Salvamento em arquivo** com escrita atômica: zero instalação. A interface `Store` é pequena
-  para trocar por Postgres quando houver muitos jogadores.
+- **Armazenamento trocável.** A interface `Store` tem duas versões: arquivo JSON com escrita
+  atômica (zero instalação) e Postgres em tabelas (Supabase). Ambas juntam as mudanças e gravam
+  em lote; ao sair, o progresso é gravado na hora.
+- **Login fora do servidor do jogo.** No modo online o navegador fala direto com o Supabase Auth
+  (e-mails, senhas, links) e manda só o token; o servidor confere quem é e nunca vê a senha.
 - **Estado público × privado.** O `WorldState` só carrega o que os outros veem (nome, posição,
   aparência, se está em batalha, noite). Time, mochila e batalha vão por mensagem direta.
 
@@ -130,4 +152,4 @@ tools/creatures/           gerador da pixel art das criaturas (referências + sc
 - Trocas entre jogadores e batalha PvP (sala própria usando o mesmo motor)
 - Segundo bioma e mapas feitos no Tiled
 - Sons e música
-- Postgres quando o número de jogadores crescer
+- Ranking e perfil público lendo as tabelas do Supabase
