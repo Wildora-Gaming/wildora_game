@@ -2,7 +2,9 @@ import Phaser from "phaser";
 import { getStateCallbacks, type Room } from "colyseus.js";
 import { MOVE_COOLDOWN_MS, TILE_SIZE, type ChatBroadcast, type Direction } from "../../../shared/constants";
 import { MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH } from "../../../shared/map";
-import { uiState } from "../ui-state";
+import { inputBlocked, uiState } from "../ui-state";
+import { openBagPanel, openTeamPanel } from "../panels/panels";
+import { areaName } from "../../../shared/creatures";
 import { objectArt, objectKey, renderGround } from "../world/art";
 import { ensureAvatar, frameIndex } from "../avatar/sheet";
 import { toast } from "../toast";
@@ -24,6 +26,7 @@ export class WorldScene extends Phaser.Scene {
   private views = new Map<string, PlayerView>();
   private keys!: Record<"up" | "down" | "left" | "right" | "w" | "a" | "s" | "d", Phaser.Input.Keyboard.Key>;
   private lastMoveSent = 0;
+  private area = "";
 
   constructor(private room: Room) {
     super("world");
@@ -52,7 +55,7 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
-    if (this.isTyping() || uiState.inBattle) return;
+    if (inputBlocked()) return;
     const dir = this.heldDirection();
     if (dir && time - this.lastMoveSent >= MOVE_COOLDOWN_MS) {
       this.lastMoveSent = time;
@@ -86,7 +89,9 @@ export class WorldScene extends Phaser.Scene {
       this.views.set(sessionId, view);
       if (online) online.textContent = String(this.room.state.players.size);
 
-      $(player).onChange(() => this.syncPlayer(view, player));
+      const isMe = sessionId === this.room.sessionId;
+      $(player).onChange(() => this.syncPlayer(view, player, isMe));
+      if (isMe) this.updateArea(player.x, player.y);
     });
 
     $(this.room.state).players.onRemove((_player: any, sessionId: string) => {
@@ -96,10 +101,19 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.room.onLeave(() => toast("Conexão perdida. Recarregue a página.", 0));
+
+    // Dia e noite
+    const night = document.getElementById("night");
+    const clock = document.getElementById("hud-clock");
+    $(this.room.state).listen("night", (isNight: boolean) => {
+      night?.classList.toggle("on", isNight);
+      if (clock) clock.textContent = isNight ? "· Noite" : "· Dia";
+    });
   }
 
-  private syncPlayer(view: PlayerView, player: any) {
+  private syncPlayer(view: PlayerView, player: any, isMe = false) {
     view.battleIcon.setVisible(Boolean(player.inBattle));
+    if (isMe) this.updateArea(player.x, player.y);
 
     if (player.look) {
       const key = ensureAvatar(this, player.look);
@@ -135,6 +149,16 @@ export class WorldScene extends Phaser.Scene {
     const anim = `${view.textureKey}:walk-${dir}`;
     if (!view.walking || view.sprite.anims.currentAnim?.key !== anim) view.sprite.play(anim, true);
     view.walking = true;
+  }
+
+  private updateArea(x: number, y: number) {
+    const name = areaName(x, y);
+    if (name === this.area) return;
+    const first = this.area === "";
+    this.area = name;
+    const hud = document.getElementById("hud-area");
+    if (hud) hud.textContent = name;
+    if (!first) toast(name, 1800);
   }
 
   private createPlayerView(player: any, isMe: boolean): PlayerView {
@@ -174,6 +198,19 @@ export class WorldScene extends Phaser.Scene {
 
   private setupInput() {
     const kb = this.input.keyboard!;
+    // Teclas de ação (só quando nada está aberto e ninguém está digitando)
+    window.addEventListener("keydown", (e) => {
+      if (inputBlocked() || e.repeat) return;
+      const k = e.key.toLowerCase();
+      if (k === "e" || k === " ") {
+        e.preventDefault();
+        this.room.send("interact");
+      } else if (k === "t") {
+        openTeamPanel(this.room);
+      } else if (k === "b" || k === "i") {
+        openBagPanel(this.room);
+      }
+    });
     const C = Phaser.Input.Keyboard.KeyCodes;
     // enableCapture=false para não "roubar" as teclas do campo de chat.
     this.keys = {
@@ -222,7 +259,7 @@ export class WorldScene extends Phaser.Scene {
     });
 
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !this.isTyping() && !uiState.inBattle) {
+      if (e.key === "Enter" && !inputBlocked()) {
         e.preventDefault();
         this.input.keyboard!.resetKeys();
         input.focus();

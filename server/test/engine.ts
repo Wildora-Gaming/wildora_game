@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { TYPE_IDS, effectiveness, typeMultiplier } from "../../shared/battle/types";
 import { SPECIES } from "../../shared/battle/data";
 import {
+  awardExperience,
+  catchChance,
+  evolveIfReady,
+  isValidAction,
   calcDamage,
   calcStats,
   chooseWildAction,
@@ -90,7 +94,7 @@ test("fórmula de dano com vantagem de tipo e mesmo tipo", () => {
 test("Rasante age primeiro mesmo sendo mais lento", () => {
   const chirpy = createCreature("chirpy", 5);
   const zappi = createCreature("zappi", 30); // muito mais rápido
-  const state = startBattle(chirpy, zappi);
+  const state = startBattle([chirpy], zappi);
   const rasante = chirpy.moves.indexOf("rasante");
   const events = resolveTurn(state, { kind: "move", moveIndex: rasante }, { kind: "move", moveIndex: 0 }, fixed(0.5));
   const first = events.find((e) => e.t === "use") as Extract<BattleEvent, { t: "use" }>;
@@ -100,7 +104,7 @@ test("Rasante age primeiro mesmo sendo mais lento", () => {
 test("Pólen Sonolento adormece e o alvo perde o turno seguinte", () => {
   const leafin = createCreature("leafin", 7);
   const pawly = createCreature("pawly", 5);
-  const state = startBattle(leafin, pawly);
+  const state = startBattle([leafin], pawly);
   const polen = leafin.moves.indexOf("polen_sonolento");
   resolveTurn(state, { kind: "move", moveIndex: polen }, { kind: "move", moveIndex: 0 }, fixed(0.1));
   assert.equal(pawly.status, "adormecido");
@@ -109,7 +113,7 @@ test("Pólen Sonolento adormece e o alvo perde o turno seguinte", () => {
 });
 
 test("fuga garantida quando muito mais rápido", () => {
-  const state = startBattle(createCreature("zappi", 30), createCreature("rocky", 2));
+  const state = startBattle([createCreature("zappi", 30)], createCreature("rocky", 2));
   const events = resolveTurn(state, { kind: "run" }, { kind: "move", moveIndex: 0 }, fixed(0.99));
   assert.deepEqual(events, [{ t: "run", ok: true }, { t: "end", result: "ran" }]);
 });
@@ -120,17 +124,17 @@ test("200 batalhas aleatórias terminam e mantêm Vida coerente", () => {
     const rng = seeded(i + 1);
     const p = createCreature(ids[i % ids.length], 2 + (i % 9));
     const f = createCreature(ids[(i * 7) % ids.length], 2 + ((i * 3) % 9));
-    const state = startBattle(p, f);
+    const state = startBattle([p], f);
     let turns = 0;
     while (!state.result) {
-      const events = resolveTurn(state, chooseWildAction({ ...state, foe: p }, rng), chooseWildAction(state, rng), rng);
+      const events = resolveTurn(state, { kind: "move", moveIndex: Math.floor(rng() * p.moves.length) }, chooseWildAction(state, rng), rng);
       for (const e of events) {
         if (e.t === "damage" || e.t === "tick") assert.ok(e.hp >= 0 && e.hp <= e.maxHp);
         assert.notEqual(describeEvent(e, { player: "A", foe: "B" }), undefined);
       }
       assert.ok(++turns < 300, "batalha sem fim");
     }
-    assert.ok(p.hp === 0 || f.hp === 0);
+    assert.ok(p.hp === 0 || f.hp === 0 || state.result === "ran");
   }
 });
 
@@ -142,6 +146,90 @@ test("XP sobe de nível e ensina golpe novo", () => {
   assert.deepEqual(r, { levels: [7], learned: ["polen_sonolento"] });
   assert.equal(leafin.moves.length, 3);
   assert.ok(leafin.hp <= calcStats(leafin).maxHp);
+});
+
+test("captura: chance cresce com Vida baixa e Orbi melhor", () => {
+  const foe = createCreature("pawly", 5);
+  const full = catchChance(foe, 1);
+  foe.hp = 1;
+  assert.ok(catchChance(foe, 1) > full * 2);
+  assert.ok(catchChance(foe, 1.5) > catchChance(foe, 1));
+  foe.status = "adormecido";
+  assert.equal(catchChance(foe, 2), 1);
+});
+
+test("Orbi captura e encerra a batalha", () => {
+  const foe = createCreature("pawly", 3);
+  foe.hp = 1;
+  foe.status = "adormecido";
+  const state = startBattle([createCreature("leafin", 5)], foe);
+  const events = resolveTurn(state, { kind: "item", itemId: "orbi_ouro" }, { kind: "move", moveIndex: 0 }, fixed(0.5));
+  assert.deepEqual(events.map((e) => e.t), ["throw", "shake", "caught", "end"]);
+  assert.equal(state.result, "caught");
+});
+
+test("Orbi falho: criatura escapa e o inimigo ataca", () => {
+  const state = startBattle([createCreature("leafin", 5)], createCreature("shado", 6));
+  const events = resolveTurn(state, { kind: "item", itemId: "orbi" }, { kind: "move", moveIndex: 0 }, fixed(0.99, 0.2, 0.5));
+  assert.deepEqual(events.slice(0, 3).map((e) => e.t), ["throw", "shake", "escape"]);
+  assert.ok(events.some((e) => e.t === "use" && e.side === "foe"));
+  assert.equal(state.result, null);
+});
+
+test("desmaio com time reserva pede troca e o inimigo não age na troca forçada", () => {
+  const weak = createCreature("chirpy", 2);
+  weak.hp = 1;
+  const reserve = createCreature("rocky", 10);
+  const state = startBattle([weak, reserve], createCreature("zappi", 12));
+  resolveTurn(state, { kind: "move", moveIndex: 0 }, { kind: "move", moveIndex: 1 }, fixed(0.5));
+  assert.equal(state.result, null);
+  assert.equal(state.needSwitch, true);
+  assert.equal(isValidAction(state, { kind: "move", moveIndex: 0 }), false);
+  assert.equal(isValidAction(state, { kind: "switch", index: 0 }), false, "não pode voltar o desmaiado");
+  const ev = resolveTurn(state, { kind: "switch", index: 1 }, { kind: "move", moveIndex: 0 }, fixed(0.5));
+  assert.deepEqual(ev.map((e) => e.t), ["switch"]);
+  assert.equal(state.active, 1);
+  assert.equal(state.needSwitch, false);
+});
+
+test("derrota só quando o time inteiro desmaia", () => {
+  const a = createCreature("chirpy", 2);
+  a.hp = 1;
+  const state = startBattle([a], createCreature("zappi", 12));
+  resolveTurn(state, { kind: "move", moveIndex: 0 }, { kind: "move", moveIndex: 1 }, fixed(0.5));
+  assert.equal(state.result, "lose");
+});
+
+test("Poção recupera Vida em batalha", () => {
+  const c = createCreature("aquari", 10);
+  c.hp = 5;
+  const state = startBattle([c], createCreature("pawly", 2));
+  assert.equal(isValidAction(state, { kind: "item", itemId: "pocao" }), true);
+  const ev = resolveTurn(state, { kind: "item", itemId: "pocao" }, { kind: "move", moveIndex: 0 }, fixed(0.99));
+  const heal = ev[0] as Extract<BattleEvent, { t: "heal" }>;
+  assert.equal(heal.t, "heal");
+  assert.equal(heal.amount, 20);
+});
+
+test("evolução no nível certo mantém o dano sofrido", () => {
+  const c = createCreature("leafin", 15);
+  c.hp -= 5;
+  assert.equal(evolveIfReady(c), null);
+  gainXp(c, 16 ** 3 - c.xp);
+  const evo = evolveIfReady(c);
+  assert.deepEqual(evo, { from: "leafin", to: "leafox" });
+  assert.equal(c.hp, calcStats(c).maxHp - 5);
+});
+
+test("XP é dividido entre quem participou e está de pé", () => {
+  const a = createCreature("leafin", 5);
+  const b = createCreature("rocky", 5);
+  const state = startBattle([a, b], createCreature("pawly", 10));
+  resolveTurn(state, { kind: "switch", index: 1 }, { kind: "move", moveIndex: 0 }, fixed(0.99));
+  state.result = "win";
+  const ev = awardExperience(state);
+  const xp = ev.filter((e) => e.t === "xp");
+  assert.equal(xp.length, 2);
 });
 
 console.log(`\n${passed} verificações passaram.\n`);

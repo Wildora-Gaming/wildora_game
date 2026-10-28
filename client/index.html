@@ -31,10 +31,19 @@
       #chat-log .sys { color: var(--muted); font-style: italic; }
       #chat-log b { color: var(--accent); }
       #hud { position: fixed; top: 12px; left: 12px; right: 12px; display: none; z-index: 5;
-        gap: 8px; flex-wrap: wrap; pointer-events: none; }
-      #hud > div { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-        padding: 6px 10px; font-size: 13px; color: var(--muted); }
+        gap: 8px; flex-wrap: wrap; align-items: flex-start; pointer-events: none; font-family: var(--pixel); }
+      #hud > * { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+        padding: 6px 10px; font-size: 15px; color: var(--muted); }
       #hud b { color: var(--text); }
+      #hud .hud-area { color: #ffe066; font-weight: 700; }
+      #hud .hud-money { color: #b8f28a; }
+      #hud button { pointer-events: auto; cursor: pointer; font-family: var(--pixel); font-weight: 700; color: #1f2430;
+        background: #ffd84a; border: 2px solid #1f2430; }
+      #hud button:hover { filter: brightness(1.07); }
+      #hud .hud-help { margin-left: auto; font-size: 13px; }
+      #night { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: #1b2a66;
+        mix-blend-mode: multiply; opacity: 0; transition: opacity 4s ease; }
+      #night.on { opacity: 0.55; }
     </style>
   </head>
   <body>
@@ -42,9 +51,15 @@
 
     <div id="login"></div>
 
+    <div id="night"></div>
+
     <div id="hud">
-      <div>Setas/WASD para andar · Enter para conversar · <span id="hud-online">0</span> online</div>
+      <div class="hud-area" id="hud-area">Vila Broto</div>
       <div id="hud-team"></div>
+      <div class="hud-money" id="hud-money"></div>
+      <button type="button" id="hud-team-btn">Time (T)</button>
+      <button type="button" id="hud-bag-btn">Mochila (B)</button>
+      <div class="hud-help">Setas/WASD andar · E interagir · Enter chat · <span id="hud-online">0</span> online <span id="hud-clock"></span></div>
     </div>
 
     <div id="chat">

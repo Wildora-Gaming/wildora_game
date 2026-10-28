@@ -25,10 +25,22 @@ import { drawAvatar } from "../avatar/sheet";
 import { creatureArt } from "../creature-art";
 
 export interface CreatorResult {
+  mode: "login" | "register";
   name: string;
+  password: string;
   look: string;
   starter: SpeciesId;
 }
+
+export interface StartOptions {
+  /** Mensagem de erro da tentativa anterior */
+  error?: string;
+  /** Tela onde a tentativa anterior foi feita */
+  mode?: "login" | "register";
+}
+
+/** Guardado no navegador (sem a senha). */
+type Saved = Partial<Pick<CreatorResult, "name" | "look" | "starter">>;
 
 const STORAGE_KEY = "wildora:perfil";
 
@@ -38,16 +50,16 @@ const STARTER_BLURB: Record<string, string> = {
   aquari: "Equilibrado em tudo. Uma ótima primeira companhia.",
 };
 
-function load(): Partial<CreatorResult> {
+function load(): Saved {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
   } catch {
     return {};
   }
 }
-function save(data: CreatorResult) {
+function save(data: Saved) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...load(), ...data }));
   } catch {
     /* sem armazenamento: tudo bem */
   }
@@ -68,16 +80,89 @@ function avatarCanvas(look: Look, dir: AvatarDir, scale: number, frame: (typeof 
   return c;
 }
 
-export function runCreator(root: HTMLElement): Promise<CreatorResult> {
-  const saved = load();
-  let look: Look = parseLook(saved.look ?? encodeLook(DEFAULT_LOOK));
-  let name = saved.name ?? "";
-  let starter: SpeciesId = saved.starter && STARTERS.includes(saved.starter) ? saved.starter : STARTERS[0];
+// Estado do formulário entre tentativas (ex.: nome já usado → volta com tudo preenchido)
+const saved = load();
+let look: Look = parseLook(saved.look ?? encodeLook(DEFAULT_LOOK));
+let name = saved.name ?? "";
+let password = "";
+let starter: SpeciesId = saved.starter && STARTERS.includes(saved.starter) ? saved.starter : STARTERS[0];
 
+function field(label: string, input: HTMLInputElement) {
+  const wrap = el("label", "field");
+  wrap.append(el("span", "field-label", label), input);
+  return wrap;
+}
+
+function textInput(value: string, placeholder: string, type = "text") {
+  const i = el("input", "name-input") as HTMLInputElement;
+  i.type = type;
+  i.value = value;
+  i.placeholder = placeholder;
+  i.maxLength = type === "password" ? 64 : 16;
+  i.autocomplete = type === "password" ? "current-password" : "username";
+  return i;
+}
+
+export function runCreator(root: HTMLElement, opts: StartOptions = {}): Promise<CreatorResult> {
   return new Promise((resolve) => {
     root.replaceChildren();
     const shell = el("div", "creator");
     root.append(shell);
+
+    // ============ Tela inicial: entrar ou criar ============
+    const showWelcome = (error = "") => {
+      shell.replaceChildren();
+      const hero = el("header", "welcome-hero");
+      hero.append(
+        el("h1", "", "Wildora"),
+        el("p", "", "Explore, capture e treine criaturas num mundo compartilhado com outros treinadores."),
+      );
+
+      const login = el("section", "panel");
+      login.append(el("h2", "", "Já tenho personagem"));
+      const lb = el("form", "panel-body login-form");
+      const nameIn = textInput(name, "Seu nome de treinador");
+      const passIn = textInput("", "Sua senha", "password");
+      const err = el("div", "form-error", error);
+      const enter = el("button", "btn primary", "Entrar");
+      enter.type = "submit";
+      lb.append(field("Nome", nameIn), field("Senha", passIn), err, enter);
+      lb.addEventListener("submit", (e) => {
+        e.preventDefault();
+        name = nameIn.value.trim();
+        password = passIn.value;
+        if (name.length < 2 || password.length < 4) {
+          err.textContent = "Preencha nome e senha.";
+          return;
+        }
+        save({ name });
+        enter.disabled = true;
+        enter.textContent = "Entrando...";
+        resolve({ mode: "login", name, password, look: encodeLook(look), starter });
+      });
+      login.append(lb);
+
+      const create = el("section", "panel");
+      create.append(el("h2", "", "Sou novo por aqui"));
+      const cb = el("div", "panel-body new-player");
+      const sample = el("div", "welcome-sample");
+      for (const id of STARTERS) {
+        const s = SPECIES[id];
+        const art = creatureArt(id, s.name, s.types as TypeId[]);
+        art.classList.add("welcome-art");
+        sample.append(art);
+      }
+      const go = el("button", "btn primary", "Criar personagem");
+      go.type = "button";
+      go.addEventListener("click", () => showStep1());
+      cb.append(sample, el("p", "", "Monte seu visual, escolha sua primeira criatura e entre na Vila Broto."), go);
+      create.append(cb);
+
+      const grid = el("div", "welcome-grid");
+      grid.append(login, create);
+      shell.append(hero, grid);
+      (name ? passIn : nameIn).focus();
+    };
 
     // ============ Passo 1: personagem ============
     const showStep1 = () => {
@@ -99,12 +184,12 @@ export function runCreator(root: HTMLElement): Promise<CreatorResult> {
       );
       for (const v of views) stage.append(v.canvas);
 
-      const nameLabel = el("label", "field-label", "Nome do treinador");
-      const nameInput = el("input", "name-input") as HTMLInputElement;
-      nameInput.maxLength = 16;
-      nameInput.placeholder = "Seu nome";
-      nameInput.value = name;
+      const nameInput = textInput(name, "Seu nome");
       nameInput.addEventListener("input", () => (name = nameInput.value));
+      const passInput = textInput(password, "Mínimo 4 caracteres", "password");
+      passInput.autocomplete = "new-password";
+      passInput.addEventListener("input", () => (password = passInput.value));
+      const formError = el("div", "form-error");
 
       const actions = el("div", "preview-actions");
       const random = el("button", "btn ghost", "Aleatório");
@@ -112,7 +197,7 @@ export function runCreator(root: HTMLElement): Promise<CreatorResult> {
       const next = el("button", "btn primary", "Próximo");
       next.type = "button";
       actions.append(random, next);
-      previewBody.append(stage, nameLabel, nameInput, actions);
+      previewBody.append(stage, field("Nome do treinador", nameInput), field("Senha", passInput), formError, actions);
       preview.append(previewBody);
 
       // animação de caminhada na prévia
@@ -126,6 +211,14 @@ export function runCreator(root: HTMLElement): Promise<CreatorResult> {
           drawAvatar(ctx, look, v.dir, cycle[tick % 4], 0, 0, 7);
         }
       }, 180);
+
+      const toWelcome = el("button", "btn ghost small", "Voltar");
+      toWelcome.type = "button";
+      toWelcome.addEventListener("click", () => {
+        window.clearInterval(anim);
+        showWelcome();
+      });
+      head.append(toWelcome);
 
       const rows: (() => void)[] = [];
       const refresh = () => rows.forEach((r) => r());
@@ -199,6 +292,10 @@ export function runCreator(root: HTMLElement): Promise<CreatorResult> {
         refresh();
       });
       next.addEventListener("click", () => {
+        name = nameInput.value.trim();
+        password = passInput.value;
+        if (name.length < 2) return void (formError.textContent = "Escolha um nome com pelo menos 2 letras.");
+        if (password.length < 4) return void (formError.textContent = "A senha precisa ter pelo menos 4 caracteres.");
         window.clearInterval(anim);
         showStep2();
       });
@@ -209,7 +306,7 @@ export function runCreator(root: HTMLElement): Promise<CreatorResult> {
     };
 
     // ============ Passo 2: criatura inicial ============
-    const showStep2 = () => {
+    const showStep2 = (error = "") => {
       shell.replaceChildren();
       const head = el("header", "creator-head");
       head.append(el("h1", "", "Wildora"), el("span", "step", "Passo 2 de 2 · Escolha sua primeira criatura"));
@@ -245,31 +342,22 @@ export function runCreator(root: HTMLElement): Promise<CreatorResult> {
       trainer.className = "mini-trainer";
       const go = el("button", "btn primary", "Começar aventura");
       go.type = "button";
-      const error = el("div", "creator-error");
+      const errorBox = el("div", "creator-error", error);
       footer.append(back, trainer, go);
 
-      back.addEventListener("click", showStep1);
+      back.addEventListener("click", () => showStep1());
       go.addEventListener("click", () => {
-        const result: CreatorResult = { name: name.trim(), look: encodeLook(look), starter };
-        save(result);
+        const result: CreatorResult = { mode: "register", name: name.trim(), password, look: encodeLook(look), starter };
+        save({ name: result.name, look: result.look, starter });
         go.disabled = true;
         go.textContent = "Entrando...";
         resolve(result);
       });
 
-      shell.append(head, panel, footer, error);
+      shell.append(head, panel, errorBox, footer);
     };
 
-    showStep1();
+    if (opts.mode === "register" && opts.error) showStep2(opts.error);
+    else showWelcome(opts.error ?? "");
   });
-}
-
-export function showCreatorError(root: HTMLElement, text: string) {
-  const err = root.querySelector(".creator-error");
-  if (err) err.textContent = text;
-  const go = root.querySelector(".step2-actions .primary") as HTMLButtonElement | null;
-  if (go) {
-    go.disabled = false;
-    go.textContent = "Começar aventura";
-  }
 }

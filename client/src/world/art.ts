@@ -59,7 +59,7 @@ function path(c: Ctx, ox: number, oy: number, tx: number, ty: number) {
   }
   const edge = "#b89660";
   const isPath = (x: number, y: number) => tileAt(x, y) === Tile.Path;
-  if (!isPath(tx, ty - 1)) { px(c, ox, oy, edge, TILE, 1); px(c, ox, oy, G.base, TILE, 0); }
+  if (!isPath(tx, ty - 1)) px(c, ox, oy, edge, TILE, 1);
   if (!isPath(tx, ty + 1)) px(c, ox, oy + TILE - 1, edge, TILE, 1);
   if (!isPath(tx - 1, ty)) px(c, ox, oy, edge, 1, TILE);
   if (!isPath(tx + 1, ty)) px(c, ox + TILE - 1, oy, edge, 1, TILE);
@@ -215,7 +215,7 @@ const ROOF = [
   ["#e8a43a", "#c4802a"],
 ];
 
-function drawHouse(variant: number) {
+function drawHouse(variant: number, role?: string) {
   const [cv, c] = canvas(80, 80);
   const [roof, roofShade] = ROOF[variant % ROOF.length];
   // paredes (48 px de altura na base)
@@ -249,6 +249,18 @@ function drawHouse(variant: number) {
   // chaminé
   px(c, 58, 0, OUT, 9, 12);
   px(c, 59, 1, "#b0705a", 7, 10);
+  // placa sobre a porta
+  if (role) {
+    px(c, 31, 42, OUT, 18, 11);
+    px(c, 32, 43, "#fffaf0", 16, 9);
+    if (role === "heal") {
+      px(c, 38, 44, "#e5484d", 4, 7);
+      px(c, 36, 46, "#e5484d", 8, 3);
+    } else {
+      blobShape(c, 40, 47, 3, 3, "#2bb3a3", "#6fd8cc", "#1b8075");
+      px(c, 37, 47, OUT, 7, 1);
+    }
+  }
   return cv;
 }
 
@@ -320,7 +332,7 @@ function drawWell() {
   return cv;
 }
 
-const DRAW: Record<ObjectKind, (variant: number) => HTMLCanvasElement> = {
+const DRAW: Record<ObjectKind, (variant: number, role?: string) => HTMLCanvasElement> = {
   tree: drawTree,
   pine: drawPine,
   house: drawHouse,
@@ -336,15 +348,15 @@ const cache = new Map<string, HTMLCanvasElement>();
 
 /** Canvas do objeto. O desenho é alinhado pela base: fundo do canvas = fundo da área bloqueada. */
 export function objectArt(o: MapObject): HTMLCanvasElement {
-  const key = `${o.kind}:${o.variant}`;
+  const key = `${o.kind}:${o.variant}:${o.role ?? ""}`;
   let cv = cache.get(key);
   if (!cv) {
-    cv = DRAW[o.kind](o.variant);
+    cv = DRAW[o.kind](o.variant, o.role);
     cache.set(key, cv);
   }
   return cv;
 }
 
 export function objectKey(o: MapObject) {
-  return `obj-${o.kind}-${o.variant}`;
+  return `obj-${o.kind}-${o.variant}-${o.role ?? ""}`;
 }

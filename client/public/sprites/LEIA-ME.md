@@ -6,6 +6,6 @@ Os arquivos atuais foram recortados da folha de referência do Wildora. Para tro
 uma criatura, basta substituir o PNG com o mesmo nome. Na batalha, a sua criatura aparece
 espelhada (olhando para o inimigo).
 
-Ids: leafin, leafox, leafaurus, flambo, flamber, flamberus, aquari, aquarel, aquarion,
-zappi, zapix, zaptor, rocky, rockor, rockolos, pawly, chirpy, shado, baleo, batto,
-sprouty, woolly, zebri, shroomy, fluffi.
+Todas as 25 estão no jogo: leafin, leafox, leafaurus, flambo, flamber, flamberus, aquari,
+aquarel, aquarion, zappi, zapix, zaptor, rocky, rockor, rockolos, pawly, chirpy, shado,
+baleo, batto, sprouty, woolly, zebri, shroomy, fluffi.

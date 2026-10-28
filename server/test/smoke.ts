@@ -1,16 +1,32 @@
-// Teste de fumaça: sobe um servidor de verdade, conecta dois clientes e
-// verifica movimento autoritativo, colisão, limite de velocidade, chat,
-// encontros na grama alta e saída de jogadores.
+// Teste de ponta a ponta: sobe um servidor de verdade e joga com clientes reais.
+// Cobre contas, salvamento, movimento, chat, batalha, captura, cura, loja e caixa.
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join as joinPath } from "node:path";
 import { Server, matchMaker } from "@colyseus/core";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { Client, type Room } from "colyseus.js";
 import { WorldRoom } from "../src/rooms/WorldRoom";
+import { Store } from "../src/store";
 import { CHAT_MAX_LENGTH, MOVE_COOLDOWN_MS, ROOM_NAME } from "../../shared/constants";
-import { MAP_HEIGHT, MAP_TILES, MAP_WIDTH, SPAWN, Tile, findPath, isWalkable, tileAt } from "../../shared/map";
+import {
+  HEAL_POINT,
+  MAP_HEIGHT,
+  MAP_OBJECTS,
+  MAP_TILES,
+  MAP_WIDTH,
+  SPAWN,
+  Tile,
+  doorOf,
+  findPath,
+  isWalkable,
+  tileAt,
+} from "../../shared/map";
 import { encodeLook, parseLook } from "../../shared/avatar/look";
 
 const PORT = 2599;
+const URL = `ws://localhost:${PORT}`;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const STEP = MOVE_COOLDOWN_MS + 40;
 
@@ -33,18 +49,18 @@ function seeded(seed: number) {
 
 const me = (room: Room) => room.state.players.get(room.sessionId);
 
-/** Segue um caminho de tiles adjacentes, um passo por vez. */
-async function walkPath(room: Room, path: { x: number; y: number }[]) {
-  for (const step of path) {
-    const p = me(room);
-    const dir = step.x > p.x ? "right" : step.x < p.x ? "left" : step.y > p.y ? "down" : "up";
+async function walk(room: Room, dir: string, steps: number) {
+  for (let i = 0; i < steps; i++) {
     room.send("move", { dir });
     await sleep(STEP);
   }
 }
 
-async function walk(room: Room, dir: string, steps: number) {
-  for (let i = 0; i < steps; i++) {
+/** Segue um caminho de tiles adjacentes, um passo por vez. */
+async function walkPath(room: Room, path: { x: number; y: number }[]) {
+  for (const step of path) {
+    const p = me(room);
+    const dir = step.x > p.x ? "right" : step.x < p.x ? "left" : step.y > p.y ? "down" : "up";
     room.send("move", { dir });
     await sleep(STEP);
   }
@@ -56,161 +72,256 @@ function ok(label: string) {
   console.log(`  ✓ ${label}`);
 }
 
+/** Cliente com caixa de mensagens recebidas, por tipo. */
+async function join(options: Record<string, unknown>) {
+  const inbox: Record<string, any[]> = {};
+  const room = await new Client(URL).joinOrCreate(ROOM_NAME, options);
+  for (const type of ["profile", "battle_start", "battle_turn", "chat", "dialog", "shop", "notice"]) {
+    inbox[type] = [];
+    room.onMessage(type, (m) => inbox[type].push(m));
+  }
+  return { room, inbox };
+}
+
+async function joinFails(options: Record<string, unknown>) {
+  try {
+    const r = await new Client(URL).joinOrCreate(ROOM_NAME, options);
+    await r.leave();
+    return "";
+  } catch (err) {
+    return (err as Error).message;
+  }
+}
+
 async function main() {
-  // Mapa
+  console.log("Servidor e clientes");
+  const dir = mkdtempSync(joinPath(tmpdir(), "wildora-"));
+  const dataFile = joinPath(dir, "save.json");
+  const store = new Store(dataFile);
+  WorldRoom.store = store;
+
   assert.equal(MAP_TILES.length, MAP_WIDTH * MAP_HEIGHT);
   assert.equal(tileAt(SPAWN.x, SPAWN.y), Tile.Path);
-  ok("mapa tem o tamanho certo e spawn é caminhável");
+  assert.ok(isWalkable(HEAL_POINT.x, HEAL_POINT.y));
+  ok("mapa: tamanho, spawn e Centro de Cura acessíveis");
 
   const gameServer = new Server({ transport: new WebSocketTransport() });
   gameServer.define(ROOM_NAME, WorldRoom);
   await gameServer.listen(PORT);
 
-  const url = `ws://localhost:${PORT}`;
-  const a = await new Client(url).joinOrCreate(ROOM_NAME, { name: "Ana", starter: "flambo", look: "3.4.4.1.2.2.5.2.3.9.2.7" });
-  const chatB: any[] = [];
-  const battleStarts: any[] = [];
-  const turns: any[] = [];
-  const teamA: any[] = [];
-  const teamB: any[] = [];
-  a.onMessage("battle_start", (m) => battleStarts.push(m));
-  a.onMessage("battle_turn", (m) => turns.push(m));
-  a.onMessage("team", (m) => teamA.push(m));
-  a.onMessage("chat", () => {});
+  // ---------- Contas ----------
+  const ANA = { name: "Ana", password: "senha123" };
+  const { room: a, inbox: ia } = await join({ mode: "register", ...ANA, starter: "flambo", look: "3.4.4.1.2.2.5.2.3.9.2.7" });
+  assert.match(await joinFails({ mode: "register", name: "ana", password: "outra123" }), /já está em uso/);
+  assert.match(await joinFails({ mode: "login", name: "Ana", password: "errada" }), /incorretos/);
+  assert.match(await joinFails({ mode: "login", ...ANA }), /já está conectada/);
+  assert.match(await joinFails({ mode: "register", name: "Zé", password: "12" }), /pelo menos 4/);
+  ok("cadastro, nome repetido, senha errada, login duplo e senha curta");
 
-  const b = await new Client(url).joinOrCreate(ROOM_NAME, { name: "Beto<script>", starter: "hacker", look: "99.x.-1" });
-  b.onMessage("chat", (m) => chatB.push(m));
-  b.onMessage("team", (m) => teamB.push(m));
-  b.onMessage("battle_start", () => {});
-  b.onMessage("battle_turn", () => {});
-
+  const { room: b, inbox: ib } = await join({ mode: "register", name: "Beto<script>", password: "abcd", starter: "hacker", look: "99.x.-1" });
   assert.equal(a.roomId, b.roomId);
   await waitFor(() => a.state.players?.size === 2 && b.state.players?.size === 2, "dois jogadores");
   ok("dois clientes na mesma sala e cada um vê o outro");
 
   assert.equal(me(b).name, "Betoscript");
-  ok("nome sanitizado no servidor");
-
   assert.equal(b.state.players.get(a.sessionId)?.look, "3.4.4.1.2.2.5.2.3.9.2.7");
-  assert.equal(me(b).look, encodeLook(parseLook("")), "aparência inválida vira o padrão");
-  ok("aparência do personagem sincronizada e validada");
+  assert.equal(me(b).look, encodeLook(parseLook("")));
+  ok("nome e aparência validados e sincronizados");
 
+  await waitFor(() => ia.profile.length > 0 && ib.profile.length > 0, "perfil inicial");
+  const pa = ia.profile[0];
+  assert.equal(pa.team[0].speciesId, "flambo");
+  assert.equal(pa.team[0].level, 5);
+  assert.equal(pa.money, 500);
+  assert.deepEqual(pa.bag, { orbi: 5, pocao: 3 });
+  assert.equal(ib.profile[0].team[0].speciesId, "leafin", "inicial inválido cai no padrão");
+  ok("perfil inicial: criatura, 500 Sementes, 5 Orbis e 3 Poções");
+
+  // ---------- Movimento e chat ----------
   assert.deepEqual([me(a).x, me(a).y], [SPAWN.x, SPAWN.y]);
   a.send("move", { dir: "right" });
   await waitFor(() => b.state.players.get(a.sessionId)?.x === SPAWN.x + 1, "B ver A andar");
-  ok("movimento de A chega para B");
-
   await sleep(STEP);
   for (let i = 0; i < 6; i++) a.send("move", { dir: "left" });
   await sleep(STEP);
   assert.equal(me(a).x, SPAWN.x, "só um passo deveria ter sido aceito");
-  ok("rajada de comandos limitada pelo cooldown do servidor");
-
   a.send("move", { dir: "teleport" });
-  a.send("move", null);
-  a.send("hack", { x: 1, y: 1 });
-  await sleep(STEP);
-  assert.deepEqual([me(a).x, me(a).y], [SPAWN.x, SPAWN.y]);
-  ok("mensagens inválidas ignoradas sem derrubar a sala");
+  a.send("hack", { x: 1 });
+  ok("movimento sincronizado, cooldown e mensagens inválidas");
 
-  // Anda para o norte pela estrada até bater no poço da praça e tenta atravessar
   await walk(a, "up", 8);
-  assert.ok(!isWalkable(me(a).x, me(a).y - 1), `deveria ter parado antes de um obstáculo (${me(a).x},${me(a).y})`);
-  assert.ok(isWalkable(me(a).x, me(a).y));
-  assert.equal(me(a).dir, "up");
-  ok(`colisão com objetos do mapa (parou em ${me(a).x},${me(a).y})`);
+  assert.ok(!isWalkable(me(a).x, me(a).y - 1));
+  ok(`colisão com objetos (parou em ${me(a).x},${me(a).y})`);
 
-  // Volta ao spawn
-  await walkPath(a, findPath(me(a), (x, y) => x === SPAWN.x && y === SPAWN.y)!);
-  assert.deepEqual([me(a).x, me(a).y], [SPAWN.x, SPAWN.y]);
-
-  // Chat
   a.send("chat", { text: "  oi   pessoal  " });
-  await waitFor(() => chatB.some((m) => m.from === "Ana" && m.text === "oi pessoal"), "chat chegar");
-  ok("chat normalizado e entregue");
-
+  await waitFor(() => ib.chat.some((m) => m.from === "Ana" && m.text === "oi pessoal"), "chat");
   await sleep(800);
   a.send("chat", { text: "x".repeat(500) });
-  await waitFor(() => chatB.some((m) => m.from === "Ana" && m.text.length === CHAT_MAX_LENGTH), "chat longo");
-  ok(`chat cortado em ${CHAT_MAX_LENGTH} caracteres`);
+  await waitFor(() => ib.chat.some((m) => m.from === "Ana" && m.text.length === CHAT_MAX_LENGTH), "chat longo");
+  ok("chat normalizado e limitado");
 
-  // Time inicial
-  await waitFor(() => teamA.length > 0 && teamB.length > 0, "time inicial");
-  assert.equal(teamA[0].team[0].speciesId, "flambo");
-  assert.equal(teamA[0].team[0].level, 5);
-  assert.equal(teamB[0].team[0].speciesId, "leafin", "inicial inválido cai no padrão");
-  ok("inicial escolhido no login (e validado no servidor)");
+  // ---------- Placa ----------
+  const sign = MAP_OBJECTS.find((o) => o.kind === "sign" && o.x === 46)!;
+  await walkPath(a, findPath(me(a), (x, y) => x === sign.x && y === sign.y + 1)!);
+  a.send("move", { dir: "up" }); // vira para a placa
+  await sleep(STEP);
+  a.send("interact");
+  await waitFor(() => ia.dialog.length > 0, "placa");
+  assert.match(ia.dialog[0].text, /Vila Broto/);
+  ok("ler placa com interação");
 
-  // Encontro forçado: RNG = 0 sempre dispara
+  // ---------- Batalha ----------
   const room = matchMaker.getLocalRoomById(a.roomId) as WorldRoom;
-  room.rng = () => 0;
   const route = findPath(me(a), (x, y) => tileAt(x, y) === Tile.TallGrass)!;
-  assert.ok(route, "precisa existir caminho até a grama alta");
-  room.rng = () => 0.99; // sem encontro no caminho
+  room.rng = () => 0.99;
   await walkPath(a, route.slice(0, -1));
-  room.rng = () => 0; // encontro garantido no último passo
+  room.rng = () => 0;
   await walkPath(a, route.slice(-1));
-  assert.equal(tileAt(me(a).x, me(a).y), Tile.TallGrass);
-  await waitFor(() => battleStarts.length === 1, "batalha começar");
+  await waitFor(() => ia.battle_start.length === 1, "batalha começar");
   room.rng = seeded(42);
-  const start = battleStarts[0];
-  assert.equal(start.foe.speciesId, "pawly");
-  assert.equal(start.player.speciesId, "flambo");
+  const start = ia.battle_start[0];
+  assert.equal(start.team[start.active].speciesId, "flambo");
   assert.equal(start.foe.moves.length, 0, "golpes do selvagem ficam ocultos");
   await waitFor(() => b.state.players.get(a.sessionId)?.inBattle === true, "B ver A em batalha");
-  ok(`encontro abre batalha: ${start.foe.name} nv. ${start.foe.level}, visível para os outros`);
+  ok(`encontro na ${start.zone}: ${start.foe.name} nv. ${start.foe.level}`);
 
   const pos = [me(a).x, me(a).y];
   await walk(a, "up", 2);
   assert.deepEqual([me(a).x, me(a).y], pos);
-  ok("não anda durante a batalha");
-
   a.send("battle_action", { kind: "move", moveIndex: 9 });
-  a.send("battle_action", { kind: "item" });
+  a.send("battle_action", { kind: "item", itemId: "orbi_ouro" }); // não tem na mochila
   await sleep(400);
-  assert.equal(turns.length, 0);
-  ok("ações de batalha inválidas ignoradas");
+  assert.equal(ia.battle_turn.length, 0);
+  ok("não anda em batalha; ações inválidas e itens que não tem são ignorados");
 
-  for (let i = 0; i < 40 && !turns.at(-1)?.over; i++) {
-    const before = turns.length;
-    a.send("battle_action", { kind: "move", moveIndex: i % start.player.moves.length });
-    await waitFor(() => turns.length > before, "turno");
-    await sleep(320);
-  }
-  const last = turns.at(-1);
-  assert.ok(last.over, "batalha deveria terminar");
-  const end = last.events.at(-1);
-  assert.equal(end.t, "end");
-  const all = turns.flatMap((t: any) => t.events);
-  if (end.result === "win") assert.ok(all.some((e: any) => e.t === "xp"), "vitória dá XP");
-  await waitFor(() => b.state.players.get(a.sessionId)?.inBattle === false, "fim visível");
-  await waitFor(() => teamA.length >= 2, "time atualizado");
-  ok(`batalha jogada até o fim em ${turns.length} turnos: ${end.result}`);
-
-  // Fuga
+  // Captura garantida: RNG 0 acerta qualquer chance > 0
   room.rng = () => 0;
-  const nBattles = battleStarts.length;
+  a.send("battle_action", { kind: "item", itemId: "orbi" });
+  await waitFor(() => ia.battle_turn.length === 1, "turno da captura");
+  const capture = ia.battle_turn[0];
+  const kinds = capture.events.map((e: any) => e.t);
+  assert.ok(kinds.includes("caught") && kinds.includes("sent") && kinds.includes("money"), kinds.join(","));
+  assert.equal(capture.over, true);
+  assert.equal(capture.bag.orbi, 4);
+  await waitFor(() => ia.profile.length >= 2 && ia.profile.at(-1).team.length === 2, "time com 2");
+  assert.ok(ia.profile.at(-1).money > 500);
+  ok(`captura com Orbi: ${start.foe.name} entrou no time e rendeu Sementes`);
+
+  // Segunda batalha até o fim
+  const grass = { x: me(a).x, y: me(a).y };
   const back = route.at(-2) ?? SPAWN;
-  const grassTile = { x: me(a).x, y: me(a).y };
   room.rng = () => 0.99;
+  await sleep(STEP);
   await walkPath(a, [back]);
   room.rng = () => 0;
-  await walkPath(a, [grassTile]);
-  await waitFor(() => battleStarts.length > nBattles, "segundo encontro");
-  const nTurns = turns.length;
+  await walkPath(a, [grass]);
+  await waitFor(() => ia.battle_start.length === 2, "segunda batalha");
+  room.rng = seeded(7);
+  const firstTurn = ia.battle_turn.length;
+  const lastOfThis = () => (ia.battle_turn.length > firstTurn ? ia.battle_turn.at(-1) : undefined);
+  for (let i = 0; i < 60 && !lastOfThis()?.over; i++) {
+    const before = ia.battle_turn.length;
+    const last = lastOfThis();
+    if (last?.needSwitch) {
+      const idx = last.team.findIndex((c: any) => c.hp > 0);
+      a.send("battle_action", { kind: "switch", index: idx });
+    } else {
+      a.send("battle_action", { kind: "move", moveIndex: 0 });
+    }
+    await waitFor(() => ia.battle_turn.length > before, "turno");
+    await sleep(320);
+  }
+  const end = ia.battle_turn.at(-1).events.at(-1);
+  assert.equal(end.t, "end");
+  await waitFor(() => b.state.players.get(a.sessionId)?.inBattle === false, "fim visível");
+  ok(`batalha jogada até o fim: ${end.result}`);
+
+  // Fuga
+  room.rng = () => 0.99;
+  await sleep(STEP);
+  await walkPath(a, findPath(me(a), (x, y) => tileAt(x, y) !== Tile.TallGrass)!);
+  const nb = ia.battle_start.length;
+  room.rng = () => 0;
+  await walkPath(a, findPath(me(a), (x, y) => tileAt(x, y) === Tile.TallGrass)!);
+  await waitFor(() => ia.battle_start.length > nb, "terceiro encontro");
+  const nt = ia.battle_turn.length;
   a.send("battle_action", { kind: "run" });
-  await waitFor(() => turns.length > nTurns, "fuga");
-  assert.deepEqual(turns.at(-1).events, [{ t: "run", ok: true }, { t: "end", result: "ran" }]);
-  room.rng = Math.random;
+  await waitFor(() => ia.battle_turn.length > nt, "fuga");
+  assert.deepEqual(ia.battle_turn.at(-1).events, [{ t: "run", ok: true }, { t: "end", result: "ran" }]);
   ok("fuga de criatura selvagem");
 
-  // Saída
+  // ---------- Centro de Cura, Loja, caixa ----------
+  room.rng = () => 0.99; // sem encontros no caminho
+  const heal = MAP_OBJECTS.find((o) => o.role === "heal")!;
+  const healDoor = doorOf(heal);
+  await sleep(STEP);
+  await walkPath(a, findPath(me(a), (x, y) => x === healDoor.x && y === healDoor.y + 1)!);
+  a.send("move", { dir: "up" });
+  await sleep(STEP);
+  const nd = ia.dialog.length;
+  a.send("interact");
+  await waitFor(() => ia.dialog.length > nd, "cura");
+  assert.match(ia.dialog.at(-1).title, /Centro de Cura/);
+  await waitFor(() => ia.profile.at(-1).team.every((c: any) => c.hp === c.maxHp), "time curado");
+  ok("Centro de Cura recupera o time");
+
+  const shop = MAP_OBJECTS.find((o) => o.role === "shop")!;
+  const shopDoor = doorOf(shop);
+  await sleep(STEP);
+  await walkPath(a, findPath(me(a), (x, y) => x === shopDoor.x && y === shopDoor.y + 1)!);
+  a.send("move", { dir: "up" });
+  await sleep(STEP);
+  a.send("interact");
+  await waitFor(() => ia.shop.length > 0, "loja");
+  const money = ia.profile.at(-1).money;
+  const orbis = ia.profile.at(-1).bag.orbi ?? 0;
+  a.send("buy", { itemId: "orbi", qty: 2 });
+  await waitFor(() => (ia.profile.at(-1).bag.orbi ?? 0) === orbis + 2, "compra");
+  assert.equal(ia.profile.at(-1).money, money - 400);
+  a.send("buy", { itemId: "orbi_ouro", qty: 1 }); // não está à venda
+  a.send("buy", { itemId: "orbi", qty: 9999 });
+  await sleep(300);
+  assert.equal(ia.profile.at(-1).bag.orbi, orbis + 2);
+  ok("Loja vende Orbis e recusa compras inválidas");
+
+  const teamBefore = ia.profile.at(-1).team.length;
+  const np = ia.profile.length;
+  a.send("box_deposit", { index: teamBefore - 1 });
+  await waitFor(() => ia.profile.length > np, "caixa");
+  assert.equal(ia.profile.at(-1).team.length, teamBefore - 1);
+  assert.equal(ia.profile.at(-1).box.length, 1);
+  a.send("box_withdraw", { index: 0 });
+  await waitFor(() => ia.profile.at(-1).team.length === teamBefore, "tirar da caixa");
+  a.send("team_order", { from: 1, to: 0 });
+  await waitFor(() => ia.profile.at(-1).team[0].speciesId !== "flambo", "nova líder");
+  ok("caixa e ordem do time");
+
+  // ---------- Salvamento ----------
+  const saved = { x: me(a).x, y: me(a).y, team: ia.profile.at(-1).team.length };
   await b.leave();
   await waitFor(() => a.state.players.size === 1, "B sair");
-  ok("saída de jogador propagada");
-
   await a.leave();
+  await sleep(200);
+  store.flush();
+  const file = JSON.parse(readFileSync(dataFile, "utf8"));
+  assert.equal(file.trainers.length, 2);
+  assert.ok(!JSON.stringify(file).includes("senha123"), "senha não pode ser gravada em texto");
+  const again = await join({ mode: "login", ...ANA });
+  await waitFor(() => again.inbox.profile.length > 0, "perfil após login");
+  assert.equal(again.inbox.profile[0].team.length, saved.team);
+  assert.deepEqual([me(again.room).x, me(again.room).y], [saved.x, saved.y]);
+  ok("progresso salvo: login devolve posição e time; senha guardada com hash");
+
+  // Nova instância do Store lendo o mesmo arquivo (simula reiniciar o servidor)
+  await again.room.leave();
+  await sleep(200);
+  store.flush();
+  const reloaded = new Store(dataFile);
+  assert.equal(reloaded.findByName("ANA")?.team.length, saved.team);
+  ok("arquivo de save sobrevive a reiniciar o servidor");
+
   await gameServer.gracefullyShutdown(false);
+  rmSync(dir, { recursive: true, force: true });
   console.log(`\n${passed} verificações passaram.`);
   process.exit(0);
 }

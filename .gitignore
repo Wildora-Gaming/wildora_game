@@ -2,3 +2,5 @@ node_modules
 dist
 *.log
 .impeccable
+server/data/
+__pycache__

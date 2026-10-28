@@ -47,12 +47,16 @@ defineTypes(Player, {
 
 export class WorldState extends Schema {
   declare players: MapSchema<Player>;
+  /** Noite no ciclo dia/noite (afeta encontros e o visual) */
+  declare night: boolean;
 
   constructor() {
     super();
     this.players = new MapSchema<Player>();
+    this.night = false;
   }
 }
 defineTypes(WorldState, {
   players: { map: Player },
+  night: "boolean",
 });

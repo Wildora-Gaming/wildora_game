@@ -1,6 +1,7 @@
 // Motor de batalha puro: sem rede, sem relógio, RNG injetado.
 // O servidor é o único que chama resolveTurn; o cliente só anima os eventos.
 import { getMove, getSpecies, type StatusId } from "./data";
+import { getItem } from "../items";
 import { effectiveness, type TypeId } from "./types";
 
 export type Rng = () => number;
@@ -108,21 +109,44 @@ export function gainXp(c: Creature, amount: number): XpResult {
   return result;
 }
 
+// ---------------- Evolução ----------------
+
+/** Se a criatura atingiu o nível de evolução, evolui e devolve de/para. */
+export function evolveIfReady(c: Creature): { from: string; to: string } | null {
+  const evo = getSpecies(c.speciesId).evolvesTo;
+  if (!evo || c.level < evo.level) return null;
+  const from = c.speciesId;
+  const before = calcStats(c).maxHp;
+  c.speciesId = evo.species;
+  c.hp = Math.max(0, c.hp + calcStats(c).maxHp - before);
+  return { from, to: evo.species };
+}
+
 // ---------------- Batalha ----------------
 
 export type Side = "player" | "foe";
 export const other = (s: Side): Side => (s === "player" ? "foe" : "player");
 
-export type Action = { kind: "move"; moveIndex: number } | { kind: "run" };
+export type Action =
+  | { kind: "move"; moveIndex: number }
+  | { kind: "run" }
+  | { kind: "switch"; index: number }
+  | { kind: "item"; itemId: string; target?: number };
 
-export type BattleResult = "win" | "lose" | "ran";
+export type BattleResult = "win" | "lose" | "ran" | "caught";
 
 export interface BattleState {
-  player: Creature;
+  team: Creature[];
+  /** índice da criatura em campo no time */
+  active: number;
   foe: Creature;
   wild: boolean;
   turn: number;
   result: BattleResult | null;
+  /** a criatura em campo desmaiou e o jogador precisa escolher outra */
+  needSwitch: boolean;
+  /** uids das criaturas do jogador que entraram em campo (dividem o XP) */
+  participants: string[];
 }
 
 export type BattleEvent =
@@ -137,21 +161,65 @@ export type BattleEvent =
   | { t: "tick"; side: Side; status: StatusId; amount: number; hp: number; maxHp: number }
   | { t: "faint"; side: Side }
   | { t: "run"; ok: boolean }
-  | { t: "xp"; amount: number }
-  | { t: "level"; level: number }
-  | { t: "learn"; moveId: string }
+  | { t: "switch"; index: number; view: CreatureView }
+  | { t: "heal"; index: number; itemId: string; amount: number; hp: number; maxHp: number }
+  | { t: "throw"; itemId: string }
+  | { t: "shake"; count: number }
+  | { t: "caught"; speciesId: string }
+  | { t: "escape" }
+  | { t: "xp"; name: string; amount: number }
+  | { t: "level"; name: string; level: number }
+  | { t: "learn"; name: string; moveId: string }
+  | { t: "evolve"; from: string; to: string }
+  | { t: "money"; amount: number }
+  | { t: "sent"; where: "team" | "box"; name: string }
   | { t: "end"; result: BattleResult };
 
-export function startBattle(player: Creature, foe: Creature, wild = true): BattleState {
-  return { player, foe, wild, turn: 0, result: null };
+export function activeOf(state: BattleState): Creature {
+  return state.team[state.active];
 }
 
+export function startBattle(team: Creature[], foe: Creature, wild = true): BattleState {
+  const active = Math.max(0, team.findIndex((c) => c.hp > 0));
+  return {
+    team,
+    active,
+    foe,
+    wild,
+    turn: 0,
+    result: null,
+    needSwitch: false,
+    participants: [team[active].uid],
+  };
+}
+
+function isIndex(n: unknown, length: number): n is number {
+  return Number.isInteger(n) && (n as number) >= 0 && (n as number) < length;
+}
+
+/** Valida forma e regras da ação (o servidor confere a mochila à parte). */
 export function isValidAction(state: BattleState, action: unknown): action is Action {
-  if (!action || typeof action !== "object") return false;
-  const a = action as { kind?: unknown; moveIndex?: unknown };
-  if (a.kind === "run") return state.wild;
-  if (a.kind === "move") {
-    return Number.isInteger(a.moveIndex) && (a.moveIndex as number) >= 0 && (a.moveIndex as number) < state.player.moves.length;
+  if (!action || typeof action !== "object" || state.result) return false;
+  const a = action as Record<string, unknown>;
+  if (state.needSwitch) {
+    return a.kind === "switch" && isIndex(a.index, state.team.length) && state.team[a.index as number].hp > 0;
+  }
+  switch (a.kind) {
+    case "run":
+      return state.wild;
+    case "move":
+      return isIndex(a.moveIndex, activeOf(state).moves.length);
+    case "switch":
+      return isIndex(a.index, state.team.length) && a.index !== state.active && state.team[a.index as number].hp > 0;
+    case "item": {
+      const item = getItem(a.itemId);
+      if (!item) return false;
+      if (item.kind === "orb") return state.wild;
+      const target = a.target === undefined ? state.active : a.target;
+      if (!isIndex(target, state.team.length)) return false;
+      const c = state.team[target as number];
+      return c.hp > 0 && c.hp < calcStats(c).maxHp;
+    }
   }
   return false;
 }
@@ -187,56 +255,120 @@ export function calcDamage(
   return { amount, eff, crit };
 }
 
+/** Chance de captura (ver "Captura" no documento de design). */
+export function catchChance(foe: Creature, orbPower: number): number {
+  const max = calcStats(foe).maxHp;
+  const statusBonus = foe.status === "adormecido" ? 2 : foe.status === "paralisado" || foe.status === "assustado" ? 1.5 : 1;
+  const p = (1 - (2 / 3) * (foe.hp / max)) * getSpecies(foe.speciesId).catchRate * orbPower * statusBonus;
+  return Math.min(1, Math.max(0, p));
+}
+
 function applyStatus(target: Creature, status: StatusId, rng: Rng) {
   target.status = status;
   target.statusTurns = status === "adormecido" ? 1 + Math.floor(rng() * 3) : status === "assustado" ? 2 : 0;
 }
 
 /**
- * Resolve um turno inteiro e devolve os eventos em ordem.
- * Muta `state`. Depois de `result` definido, não faz nada.
+ * Resolve um turno inteiro e devolve os eventos em ordem. Muta `state`.
+ * Itens e trocas acontecem antes dos golpes; uma troca forçada (após desmaio) não dá turno ao inimigo.
  */
 export function resolveTurn(state: BattleState, playerAction: Action, foeAction: Action, rng: Rng): BattleEvent[] {
   const events: BattleEvent[] = [];
   if (state.result) return events;
   state.turn += 1;
-  const get = (s: Side) => (s === "player" ? state.player : state.foe);
+  const get = (s: Side) => (s === "player" ? activeOf(state) : state.foe);
 
   const finish = (result: BattleResult) => {
     state.result = result;
     events.push({ t: "end", result });
   };
 
-  // 1. Fuga resolve antes de tudo
-  const order: Side[] = [];
-  if (playerAction.kind === "run") {
-    const ps = effectiveSpeed(state.player);
-    const fs = Math.max(1, effectiveSpeed(state.foe));
-    const ok = rng() < Math.min(1, 0.5 + (0.5 * ps) / fs);
-    events.push({ t: "run", ok });
-    if (ok) {
-      finish("ran");
-      return events;
+  const doSwitch = (index: number) => {
+    const out = activeOf(state);
+    if (out.status === "assustado") {
+      out.status = null;
+      out.statusTurns = 0;
     }
-    order.push("foe");
-  } else {
-    // 2. Ordem por prioridade do golpe, depois Velocidade, empate sorteado
-    const prio = (s: Side, a: Action) => (a.kind === "move" ? getMove(get(s).moves[a.moveIndex]).priority ?? 0 : 0);
-    const pp = prio("player", playerAction);
-    const fp = prio("foe", foeAction);
-    let playerFirst: boolean;
-    if (pp !== fp) playerFirst = pp > fp;
-    else {
-      const ps = effectiveSpeed(state.player);
-      const fs = effectiveSpeed(state.foe);
-      playerFirst = ps !== fs ? ps > fs : rng() < 0.5;
-    }
-    order.push(...((playerFirst ? ["player", "foe"] : ["foe", "player"]) as Side[]));
+    state.active = index;
+    const c = activeOf(state);
+    if (!state.participants.includes(c.uid)) state.participants.push(c.uid);
+    events.push({ t: "switch", index, view: toView(c) });
+  };
+
+  /** Desmaio da criatura do jogador: troca forçada se houver outra de pé. */
+  const playerFainted = () => {
+    events.push({ t: "faint", side: "player" });
+    if (state.team.some((c) => c.hp > 0)) state.needSwitch = true;
+    else finish("lose");
+  };
+
+  // Troca forçada
+  if (state.needSwitch) {
+    if (playerAction.kind === "switch") doSwitch(playerAction.index);
+    state.needSwitch = false;
+    return events;
   }
 
-  // 3. Cada lado age
+  const order: Side[] = [];
+  switch (playerAction.kind) {
+    case "run": {
+      const ps = effectiveSpeed(activeOf(state));
+      const fs = Math.max(1, effectiveSpeed(state.foe));
+      const ok = rng() < Math.min(1, 0.5 + (0.5 * ps) / fs);
+      events.push({ t: "run", ok });
+      if (ok) {
+        finish("ran");
+        return events;
+      }
+      order.push("foe");
+      break;
+    }
+    case "switch":
+      doSwitch(playerAction.index);
+      order.push("foe");
+      break;
+    case "item": {
+      const item = getItem(playerAction.itemId)!;
+      if (item.kind === "heal") {
+        const index = playerAction.target ?? state.active;
+        const c = state.team[index];
+        const max = calcStats(c).maxHp;
+        const before = c.hp;
+        c.hp = Math.min(max, c.hp + item.power);
+        events.push({ t: "heal", index, itemId: item.id, amount: c.hp - before, hp: c.hp, maxHp: max });
+      } else {
+        events.push({ t: "throw", itemId: item.id });
+        const caught = rng() < catchChance(state.foe, item.power);
+        events.push({ t: "shake", count: caught ? 3 : Math.floor(rng() * 3) });
+        if (caught) {
+          events.push({ t: "caught", speciesId: state.foe.speciesId });
+          finish("caught");
+          return events;
+        }
+        events.push({ t: "escape" });
+      }
+      order.push("foe");
+      break;
+    }
+    case "move": {
+      // Ordem por prioridade do golpe, depois Velocidade, empate sorteado
+      const prio = (s: Side, a: Action) => (a.kind === "move" ? getMove(get(s).moves[a.moveIndex]).priority ?? 0 : 0);
+      const pp = prio("player", playerAction);
+      const fp = prio("foe", foeAction);
+      let playerFirst: boolean;
+      if (pp !== fp) playerFirst = pp > fp;
+      else {
+        const ps = effectiveSpeed(activeOf(state));
+        const fs = effectiveSpeed(state.foe);
+        playerFirst = ps !== fs ? ps > fs : rng() < 0.5;
+      }
+      order.push(...((playerFirst ? ["player", "foe"] : ["foe", "player"]) as Side[]));
+    }
+  }
+
+  // Cada lado age
   for (const side of order) {
-    if (state.result) break;
+    if (state.result || state.needSwitch) break;
     const actor = get(side);
     const target = get(other(side));
     const action = side === "player" ? playerAction : foeAction;
@@ -274,37 +406,42 @@ export function resolveTurn(state: BattleState, playerAction: Action, foeAction:
       target.hp = Math.max(0, target.hp - amount);
       events.push({ t: "damage", side: other(side), amount, hp: target.hp, maxHp: calcStats(target).maxHp, eff, crit });
       if (target.hp === 0) {
-        events.push({ t: "faint", side: other(side) });
-        finish(side === "player" ? "win" : "lose");
+        if (side === "player") {
+          events.push({ t: "faint", side: "foe" });
+          finish("win");
+        } else playerFainted();
         break;
       }
     }
 
-    if (move.effect) {
-      if (rng() < move.effect.chance) {
-        if (target.status === null) {
-          applyStatus(target, move.effect.status, rng);
-          events.push({ t: "status", side: other(side), status: move.effect.status });
-        } else if (move.power === null) {
-          events.push({ t: "status_fail", side: other(side) });
-        }
+    if (move.effect && rng() < move.effect.chance) {
+      if (target.status === null) {
+        applyStatus(target, move.effect.status, rng);
+        events.push({ t: "status", side: other(side), status: move.effect.status });
+      } else if (move.power === null) {
+        events.push({ t: "status_fail", side: other(side) });
       }
+    } else if (move.effect && move.power === null) {
+      events.push({ t: "status_fail", side: other(side) });
     }
   }
 
-  // 4. Efeitos de fim de turno
-  if (!state.result) {
+  // Efeitos de fim de turno
+  if (!state.result && !state.needSwitch) {
     for (const side of ["player", "foe"] as Side[]) {
-      if (state.result) break;
+      if (state.result || state.needSwitch) break;
       const c = get(side);
+      if (c.hp <= 0) continue;
       if (c.status === "queimado" || c.status === "envenenado") {
         const maxHp = calcStats(c).maxHp;
         const amount = Math.max(1, Math.floor(maxHp / (c.status === "queimado" ? 16 : 8)));
         c.hp = Math.max(0, c.hp - amount);
         events.push({ t: "tick", side, status: c.status, amount, hp: c.hp, maxHp });
         if (c.hp === 0) {
-          events.push({ t: "faint", side });
-          finish(side === "player" ? "lose" : "win");
+          if (side === "foe") {
+            events.push({ t: "faint", side: "foe" });
+            finish("win");
+          } else playerFainted();
         }
       } else if (c.status === "assustado") {
         c.statusTurns -= 1;
@@ -317,6 +454,28 @@ export function resolveTurn(state: BattleState, playerAction: Action, foeAction:
     }
   }
 
+  return events;
+}
+
+/**
+ * Recompensas de vitória ou captura: XP para quem participou e está de pé,
+ * subida de nível, golpes novos e evolução. Devolve os eventos (antes do "end").
+ */
+export function awardExperience(state: BattleState): BattleEvent[] {
+  const events: BattleEvent[] = [];
+  const total = xpReward(state.foe, !state.wild);
+  const earners = state.team.filter((c) => c.hp > 0 && state.participants.includes(c.uid));
+  if (!earners.length) return events;
+  const share = Math.max(1, Math.floor(total / earners.length));
+  for (const c of earners) {
+    const name = getSpecies(c.speciesId).name;
+    events.push({ t: "xp", name, amount: share });
+    const { levels, learned } = gainXp(c, share);
+    for (const level of levels) events.push({ t: "level", name, level });
+    for (const moveId of learned) events.push({ t: "learn", name, moveId });
+    const evo = evolveIfReady(c);
+    if (evo) events.push({ t: "evolve", ...evo });
+  }
   return events;
 }
 
