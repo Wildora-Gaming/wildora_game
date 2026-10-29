@@ -45,7 +45,7 @@ export const ITEMS: Record<string, ItemDef> = {
     name: "Doce Estelar",
     kind: "level",
     description: "Sobe uma criatura 1 nível na hora (fora de batalha).",
-    price: 800,
+    price: 1500,
     power: 1,
   },
 };
@@ -59,12 +59,10 @@ export function getItem(id: unknown): ItemDef | null {
   return typeof id === "string" && Object.prototype.hasOwnProperty.call(ITEMS, id) ? ITEMS[id] : null;
 }
 
-/**
- * Doce Estelar ao vencer criatura selvagem: nível 10 ou mais sempre deixa um;
- * abaixo disso, 1 chance em 10.
- */
-export const CANDY_LEVEL = 10;
-export const CANDY_CHANCE_LOW = 0.1;
+/** Chance de achar um Doce Estelar ao vencer uma criatura selvagem: 5%, ou 10% a partir do nível 20. */
+export function candyChance(level: number) {
+  return level >= 20 ? 0.1 : 0.05;
+}
 
 /** Sementes ganhas ao vencer uma criatura. */
 export function moneyReward(level: number) {

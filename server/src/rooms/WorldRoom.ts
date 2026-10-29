@@ -53,12 +53,12 @@ import {
 } from "../../../shared/battle/pvp";
 import { HEAL_POINT, LEGEND_SPOTS, SPAWN, doorOf, isWalkable, isWildTile, objectAt, tileAt } from "../../../shared/map";
 import { rollWild, zoneAt } from "../../../shared/creatures";
-import { getGym, gymStages, type Gym } from "../../../shared/gyms";
+import { getGym, gymLevelCap, gymStages, type Gym } from "../../../shared/gyms";
 import { tutorOption } from "../../../shared/tutor";
 import { TYPE_LABEL } from "../../../shared/battle/types";
 import { sanitizeLook } from "../../../shared/avatar/look";
 import { STARTERS, STARTER_LEVEL, getMove, getSpecies, isSpeciesId } from "../../../shared/battle/data";
-import { CANDY_CHANCE_LOW, CANDY_LEVEL, SHOP_ITEMS, STARTING_BAG, STARTING_MONEY, getItem, moneyReward } from "../../../shared/items";
+import { SHOP_ITEMS, candyChance, STARTING_BAG, STARTING_MONEY, getItem, moneyReward } from "../../../shared/items";
 import {
   activeOf,
   awardExperience,
@@ -574,8 +574,7 @@ export class WorldRoom extends Room<WorldState> {
       events.push({ t: "money", amount: money });
       // vencer criatura selvagem pode deixar um Doce Estelar
       if (battle.wild && battle.result === "win") {
-        const lvl = battle.foe.level;
-        if (lvl >= CANDY_LEVEL || this.rng() < CANDY_CHANCE_LOW) {
+        if (this.rng() < candyChance(battle.foe.level)) {
           t.bag.doce_estelar = (t.bag.doce_estelar ?? 0) + 1;
           events.push({ t: "found", itemId: "doce_estelar" });
         }
@@ -712,6 +711,7 @@ export class WorldRoom extends Room<WorldState> {
       type: TYPE_LABEL[gym.type],
       badge: gym.badge,
       level: gym.level,
+      maxLevel: gymLevelCap(gym),
       leader: gym.leader.name,
       quote: gym.quote,
       trainers: gym.trainers.length,
@@ -734,6 +734,12 @@ export class WorldRoom extends Room<WorldState> {
     });
     if (!near) return;
     if (!s.trainer.team.some((c) => c.hp > 0)) return this.notice(client, "Seu time precisa se recuperar no Centro de Cura antes.");
+    const cap = gymLevelCap(gym);
+    const over = s.trainer.team.filter((c) => c.level > cap);
+    if (over.length) {
+      const names = over.map((c) => `${getSpecies(c.speciesId).name} (Nv. ${c.level})`).join(", ");
+      return this.notice(client, `No ${gym.name} só entram criaturas até o nível ${cap}. Guarde na caixa: ${names}.`);
+    }
     s.gymRun = { gymId: gym.id, stage: 0 };
     this.beginTrainerBattle(client, player, s, gym, 0);
   }

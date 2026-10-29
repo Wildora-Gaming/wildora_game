@@ -284,25 +284,33 @@ export function openGymOffer(room: Room, msg: GymOfferMessage) {
   for (const line of [
     `Tipo: ${msg.type}`,
     `Desafio: ${msg.trainers} treinadores e o líder, em sequência, sem curar no meio`,
-    `Nível sugerido: ${msg.level}`,
+    `Nível do ginásio: ${msg.level} · só entram criaturas até o nível ${msg.maxLevel}`,
     msg.hasBadge ? `Você já tem a ${msg.badge}: a revanche vale Sementes e XP` : `Prêmio: ${msg.badge}`,
   ])
     facts.append(el("li", "", line));
   const team = uiState.profile?.team ?? [];
+  const over = team.filter((c) => c.level > msg.maxLevel);
   const tip = el(
     "p",
-    "hint",
-    team.length
-      ? `Seu time: ${team.map((c) => `${c.name} Nv.${c.level}`).join(", ")}.`
-      : "",
+    over.length ? "hint gym-over" : "hint",
+    over.length
+      ? `Acima do nível ${msg.maxLevel}: ${over.map((c) => `${c.name} Nv.${c.level}`).join(", ")}. Guarde na caixa (Time → Caixa) para desafiar.`
+      : team.length
+        ? `Seu time: ${team.map((c) => `${c.name} Nv.${c.level}`).join(", ")}.`
+        : "",
   );
   const actions = el("div", "gym-actions");
   actions.append(
     btn("Agora não", closeModal, "ghost"),
-    btn("Desafiar", () => {
-      closeModal();
-      room.send("gym_challenge", { gymId: msg.gymId });
-    }),
+    btn(
+      "Desafiar",
+      () => {
+        closeModal();
+        room.send("gym_challenge", { gymId: msg.gymId });
+      },
+      "",
+      over.length > 0,
+    ),
   );
   body.append(lead, facts, tip, actions);
   openModal("gym", msg.name, body);

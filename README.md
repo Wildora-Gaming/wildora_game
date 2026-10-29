@@ -75,7 +75,8 @@ com `?toque=1` no endereço.
 - **XP dividido** entre quem lutou, subida de nível, golpes novos e **evolução**.
 - **Time de até 6** e caixa ilimitada; ordem do time e líder configuráveis.
 - **8 ginásios** (um de cada tipo) no Distrito dos Ginásios, ao sul da vila: em cada um você
-  enfrenta 2 treinadores e o líder em sequência, sem curar no meio. Vencer o líder dá a insígnia
+  enfrenta 2 treinadores e o líder em sequência, sem curar no meio. Só entram criaturas até 5 níveis
+  acima do nível do ginásio. Vencer o líder dá a insígnia
   e itens; treinadores trocam de criatura e escolhem golpes com estratégia.
 - **Batalha amistosa entre jogadores**: desafie quem estiver perto; os dois escolhem golpe ou troca
   e o turno resolve com as duas escolhas. As criaturas lutam com Vida cheia e ninguém perde nada.
@@ -88,7 +89,7 @@ com `?toque=1` no endereço.
   nível e evolução, e efeitos de golpe, desmaio, Orbi, grama e menus. Botão **Som** no topo ajusta
   música e efeitos (fica salvo no navegador).
 - **Doce Estelar**: sobe uma criatura 1 nível na hora (com golpes novos e evolução). Na Loja,
-  como prêmio de ginásio, sempre ao vencer criatura selvagem de nível 10+ e às vezes nas menores.
+  por 1500 Sementes, como prêmio de ginásio e às vezes ao vencer criaturas selvagens (5%, ou 10% a partir do nível 20).
 - **Casa do Treinador** (telhado verde, ao sul da praça): troca golpes. Os do repertório da espécie
   (até o nível atual, inclusive os esquecidos) são de graça; golpes do tipo da criatura e Mordida
   Firme/Golpe Bruto custam Sementes e pedem nível mínimo pela força do golpe.

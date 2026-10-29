@@ -11,6 +11,8 @@ import { FileStore } from "../src/store/file-store";
 import { ROOM_NAME } from "../../shared/constants";
 import { MAP_OBJECTS, doorOf } from "../../shared/map";
 import { isValidAction, startBattle, createCreature, xpForLevel } from "../../shared/battle/engine";
+import { candyChance } from "../../shared/items";
+import { GYMS, gymLevelCap } from "../../shared/gyms";
 
 const PORT = 2603;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -39,7 +41,7 @@ async function main() {
   const inbox: Record<string, any[]> = { profile: [], dialog: [], notice: [] };
   const room = await new Client(`ws://localhost:${PORT}`).joinOrCreate(ROOM_NAME, { mode: "register", name: "Tina", password: "senha123", starter: "flambo" });
   for (const t of Object.keys(inbox)) room.onMessage(t, (m) => inbox[t].push(m));
-  for (const t of ["battle_start", "chat", "shop", "tutor_open"]) room.onMessage(t, () => {});
+  for (const t of ["battle_start", "chat", "shop", "tutor_open", "gym_offer"]) room.onMessage(t, () => {});
   await waitFor(() => inbox.profile.length > 0, "perfil");
   const world = matchMaker.getLocalRoomById(room.roomId) as WorldRoom;
   const session = (world as any).sessions.get(room.sessionId);
@@ -78,6 +80,7 @@ async function main() {
   room.onMessage("battle_turn", (m) => inbox.battle_turn.push(m));
   const wild = createCreature("pawly", 12);
   wild.hp = 1;
+  world.rng = () => 0; // 5% de chance de doce: com rng 0 sempre sai
   session.battle = startBattle(t.team, wild, true);
   session.battleZone = "Teste";
   await sleep(350);
@@ -88,7 +91,21 @@ async function main() {
   assert.equal(t.bag.doce_estelar, 1);
   t.bag.doce_estelar = 0;
   delete t.bag.doce_estelar;
-  ok("vencer criatura selvagem de nível 10+ dá um Doce Estelar");
+  world.rng = Math.random;
+  assert.equal(candyChance(12), 0.05);
+  assert.equal(candyChance(20), 0.1);
+  ok("vencer criatura selvagem pode dar um Doce Estelar (5%, ou 10% a partir do nível 20)");
+
+  // ginásio com limite de nível: criaturas acima ficam de fora
+  const gym = GYMS[0];
+  const gymObj = MAP_OBJECTS.find((o) => o.kind === "gym" && o.gymId === gym.id)!;
+  const gp = world.state.players.get(room.sessionId)!;
+  gp.x = doorOf(gymObj).x;
+  gp.y = doorOf(gymObj).y + 1;
+  room.send("gym_challenge", { gymId: gym.id });
+  await waitFor(() => inbox.notice.some((n) => new RegExp(`só entram criaturas até o nível ${gymLevelCap(gym)}. Guarde na caixa: Flamber \\(Nv. 17\\)`).test(n.text)), "limite do ginásio");
+  assert.equal(session.battle, null);
+  ok("ginásio recusa criaturas acima do limite de nível e diz quais guardar");
 
   // ---------- Casa do Treinador ----------
   const tutor = MAP_OBJECTS.find((o) => o.role === "tutor")!;

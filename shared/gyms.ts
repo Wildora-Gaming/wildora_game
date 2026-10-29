@@ -39,6 +39,10 @@ const leader = (name: string, look: string, team: [string, number][]): GymTraine
   reward: 100 * Math.max(...team.map(([, lvl]) => lvl)),
 });
 
+/** Nível máximo das criaturas que entram no ginásio: 5 acima do nível dele. */
+export const GYM_LEVEL_MARGIN = 5;
+export const gymLevelCap = (gym: Gym) => gym.level + GYM_LEVEL_MARGIN;
+
 export const GYMS: Gym[] = [
   {
     id: "fera",
