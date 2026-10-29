@@ -41,6 +41,8 @@ function translate(message: string): string {
   if (m.includes("invalid email") || m.includes("unable to validate email")) return "Esse e-mail não parece válido.";
   if (m.includes("same password") || m.includes("different from the old")) return "A nova senha precisa ser diferente da anterior.";
   if (m.includes("signup") && m.includes("disabled")) return "Cadastros estão desativados no momento.";
+  if (m.includes("error sending") && m.includes("email"))
+    return "Não conseguimos enviar o e-mail agora. Tente de novo em alguns minutos; se continuar, avise quem cuida do jogo.";
   if (m.includes("fetch") || m.includes("network")) return "Sem conexão com o servidor de login. Verifique a internet.";
   return message;
 }
