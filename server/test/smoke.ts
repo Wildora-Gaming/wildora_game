@@ -116,9 +116,8 @@ async function main() {
   const { room: a, inbox: ia } = await join({ mode: "register", ...ANA, starter: "flambo", look: "3.4.4.1.2.2.5.2.3.9.2.7" });
   assert.match(await joinFails({ mode: "register", name: "ana", password: "outra123" }), /já está em uso/);
   assert.match(await joinFails({ mode: "login", name: "Ana", password: "errada" }), /incorretos/);
-  assert.match(await joinFails({ mode: "login", ...ANA }), /já está conectada/);
   assert.match(await joinFails({ mode: "register", name: "Zé", password: "12" }), /pelo menos 4/);
-  ok("cadastro, nome repetido, senha errada, login duplo e senha curta");
+  ok("cadastro, nome repetido, senha errada e senha curta");
 
   const { room: b, inbox: ib } = await join({ mode: "register", name: "Beto<script>", password: "abcd", starter: "hacker", look: "99.x.-1" });
   assert.equal(a.roomId, b.roomId);

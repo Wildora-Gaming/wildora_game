@@ -132,6 +132,10 @@ const PLAYER_COLORS = [0xe4572e, 0x17bebb, 0xffc914, 0x76b041, 0x9b5de5, 0xf15bb
 
 /** Contas conectadas em qualquer sala deste processo (impede login duplo). */
 const ONLINE = new Set<string>();
+/** Onde cada conta está conectada (para derrubar a conexão velha quando entra de novo). */
+const CONNECTED = new Map<string, Client>();
+/** Código de saída quando a mesma conta entra em outro lugar (o cliente não tenta reconectar). */
+export const KICKED_ELSEWHERE = 4001;
 /** Treinadores carregados na memória (inclui quem acabou de sair e ainda está sendo salvo). */
 const LOADED = new Map<string, Trainer>();
 
@@ -238,7 +242,14 @@ export class WorldRoom extends Room<WorldState> {
 
   async onAuth(_client: Client, options: JoinOptions = {}) {
     const trainer = WorldRoom.auth.mode === "supabase" ? await this.authSupabase(options) : await this.authLocal(options);
-    if (ONLINE.has(trainer.id)) throw new ServerError(409, "Essa conta já está conectada em outra janela.");
+    if (ONLINE.has(trainer.id)) {
+      // Entrou de novo (recarregou a página, a conexão do celular caiu, outra aba):
+      // a conexão nova vale e a antiga é encerrada.
+      CONNECTED.get(trainer.id)?.leave(KICKED_ELSEWHERE, "Você entrou em outro lugar.");
+      const until = Date.now() + 4000;
+      while (ONLINE.has(trainer.id) && Date.now() < until) await new Promise((r) => setTimeout(r, 40));
+      if (ONLINE.has(trainer.id)) throw new ServerError(409, "Essa conta já está conectada em outra janela. Tente de novo.");
+    }
     return trainer;
   }
 
@@ -291,6 +302,7 @@ export class WorldRoom extends Room<WorldState> {
   onJoin(client: Client, _options: JoinOptions, trainer: Trainer) {
     if (migrateMoves(trainer)) this.store.markDirty(trainer);
     ONLINE.add(trainer.id);
+    CONNECTED.set(trainer.id, client);
     LOADED.set(trainer.id, trainer);
     const start = isWalkable(trainer.x, trainer.y) ? trainer : SPAWN;
     const player = Player.create(trainer.name, start.x, start.y, PLAYER_COLORS[this.state.players.size % PLAYER_COLORS.length]);
@@ -329,6 +341,7 @@ export class WorldRoom extends Room<WorldState> {
         if (c.status === "assustado") c.status = null;
       }
       ONLINE.delete(s.trainer.id);
+      if (CONNECTED.get(s.trainer.id) === client) CONNECTED.delete(s.trainer.id);
       // grava já e só então solta da memória (se não voltou nesse meio tempo)
       const t = s.trainer;
       void this.store

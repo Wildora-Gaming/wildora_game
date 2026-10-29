@@ -18,9 +18,23 @@ export function isTouchDevice(): boolean {
   return coarse || (navigator.maxTouchPoints > 0 && !window.matchMedia?.("(hover: hover)").matches);
 }
 
-/** Marca o documento como "toque" o quanto antes (o CSS das telas usa isso). */
+/** Marca o documento como "toque" o quanto antes (o CSS das telas usa isso) e trava o zoom da página. */
 export function markTouch() {
-  if (isTouchDevice()) document.documentElement.classList.add("touch");
+  if (!isTouchDevice()) return;
+  document.documentElement.classList.add("touch");
+  const isField = (t: EventTarget | null) => t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
+  // toque duplo não dá zoom: touch-action: manipulation em tudo (touch.css) + user-scalable=no
+  // pinça (iPhone)
+  for (const ev of ["gesturestart", "gesturechange"]) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+  document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
+  // qualquer seleção de texto que escapar some no próximo toque fora de um campo
+  document.addEventListener(
+    "touchstart",
+    (e) => {
+      if (!isField(e.target)) window.getSelection()?.removeAllRanges();
+    },
+    { passive: true },
+  );
 }
 
 const ARROWS: Record<Direction, string> = { up: "▲", down: "▼", left: "◀", right: "▶" };
@@ -74,6 +88,9 @@ export function setupTouch(h: TouchHandlers) {
     set(null);
   };
 
+  // o toque no direcional nunca vira rolagem, zoom, seleção ou menu do sistema
+  root.addEventListener("touchstart", (e) => e.cancelable && e.target instanceof Element && e.target.closest(".dpad") && e.preventDefault(), { passive: false });
+  pad.addEventListener("contextmenu", (e) => e.preventDefault());
   pad.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     pointer = e.pointerId;

@@ -150,7 +150,22 @@ function startGame(room: Room) {
     sound.sfx(/Voltar|Cancelar|Recusar|Fechar|✕/.test(b.textContent ?? "") ? "back" : "click");
   });
   sound.setArea("Vila Broto");
+  // Conexão caiu (celular em segundo plano, rede oscilando): volta sozinho recarregando a página.
+  // A conta continua logada e o servidor troca a conexão velha pela nova.
+  let leaving = false;
+  room.onLeave((code) => {
+    if (leaving) return;
+    if (code === 4001) {
+      toast("Você entrou com esta conta em outro lugar. Esta janela foi desconectada.", 0);
+      return;
+    }
+    toast("Conexão perdida. Reconectando...", 0);
+    const reload = () => window.setTimeout(() => window.location.reload(), 800);
+    if (document.hidden) document.addEventListener("visibilitychange", () => !document.hidden && reload(), { once: true });
+    else reload();
+  });
   document.getElementById("hud-logout")!.addEventListener("click", async () => {
+    leaving = true;
     await room.leave().catch(() => {});
     await logout();
   });

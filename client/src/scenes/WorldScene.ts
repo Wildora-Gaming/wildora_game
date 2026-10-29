@@ -296,7 +296,6 @@ export class WorldScene extends Phaser.Scene {
       if (online) online.textContent = String(this.room.state.players.size);
     });
 
-    this.room.onLeave(() => toast("Conexão perdida. Recarregue a página.", 0));
 
     // Batalha começou: descarta passos previstos que o servidor vai recusar
     this.room.onMessage("battle_start", () => {

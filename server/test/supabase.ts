@@ -203,8 +203,7 @@ async function main() {
     await fails({ token: "token-beto-000000000000000", create: { name: "ana", look: "", starter: "leafin" } }),
     /já está em uso/,
   );
-  assert.match(await fails({ token: "token-ana-0000000000000000" }), /já está conectada/);
-  ok("nome de treinador repetido e login duplo barrados");
+  ok("nome de treinador repetido barrado");
 
   // muda o progresso no servidor e sai: precisa ir para o banco
   const room = matchMaker.getLocalRoomById(ana.roomId) as WorldRoom;
@@ -252,8 +251,20 @@ async function main() {
   await waitFor(() => profiles2.length > 0, "perfil de volta");
   assert.deepEqual(profiles2[0].team.map((c: any) => c.speciesId), ["aquari", "chirpy"]);
   assert.deepEqual(profiles2[0].badges, ["fera"]);
-  await ana2.leave();
   ok("entrar de novo devolve o progresso salvo");
+
+  // entrar de novo com a conexão antiga ainda aberta (recarregou, celular caiu): a nova vale
+  let kicked = 0;
+  ana2.onLeave((code) => (kicked = code));
+  const profiles3: any[] = [];
+  const ana3 = await new Client(URL).joinOrCreate(ROOM_NAME, { token: "token-ana-0000000000000000" });
+  ana3.onMessage("profile", (m) => profiles3.push(m));
+  for (const t of ["battle_start", "battle_turn", "chat", "dialog", "notice"]) ana3.onMessage(t, () => {});
+  await waitFor(() => profiles3.length > 0 && kicked !== 0, "conexão nova assume");
+  assert.equal(kicked, 4001);
+  assert.deepEqual(profiles3[0].team.map((c: any) => c.speciesId), ["aquari", "chirpy"]);
+  await ana3.leave();
+  ok("entrar de novo derruba a conexão antiga (sem bloquear) e mantém o progresso");
 
   await gameServer.gracefullyShutdown(false);
   authServer.close();

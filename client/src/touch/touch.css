@@ -31,6 +31,11 @@ html.touch.chat-open #touch { display: none; }
 
 /* ---------- Ajustes de tela quando é toque ---------- */
 html.touch, html.touch body { overscroll-behavior: none; }
+/* sem zoom de toque duplo e sem selecionar texto ao segurar o dedo (menos nos campos de texto) */
+html.touch * { touch-action: manipulation; }
+html.touch body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+html.touch input, html.touch textarea { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+html.touch .dpad, html.touch .dpad * { touch-action: none; }
 html.touch #game { touch-action: none; }
 html.touch .kbd, html.touch .hud-help { display: none !important; }
 html.touch #hud-team-btn, html.touch #hud-bag-btn { display: none; }
