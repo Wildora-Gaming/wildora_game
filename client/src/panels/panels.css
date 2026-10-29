@@ -1,7 +1,8 @@
 /* Painéis no estilo da folha de referência: cabeçalho azul-marinho, corpo creme. */
 .modal-backdrop { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; padding: 16px;
+  grid-template-columns: minmax(0, 1fr); justify-items: center;
   background: rgba(8, 10, 14, 0.55); }
-.modal { width: min(460px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column;
+.modal { width: min(460px, 100%); max-height: calc(100dvh - 32px); display: flex; flex-direction: column;
   background: #f3efe4; border: 3px solid #1f2430; border-radius: 12px; overflow: hidden; box-shadow: 0 6px 0 #0a0d14;
   font-family: var(--pixel); color: #1f2430; animation: modal-in 0.18s ease-out; }
 .modal.wide { width: min(720px, 100%); }

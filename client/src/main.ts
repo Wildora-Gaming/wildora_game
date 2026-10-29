@@ -9,6 +9,7 @@ import { makeSupabase, readEmailLink, runAuth } from "./auth/auth";
 import { openBagPanel, openGymOffer, openShop, openTeamPanel, showDialog } from "./panels/panels";
 import { setProfile, uiState } from "./ui-state";
 import { toast } from "./toast";
+import { markTouch, setupTouch } from "./touch/touch";
 import type { DialogMessage, GymOfferMessage, NoticeMessage, ProfileMessage, ShopMessage } from "../../shared/constants";
 
 const loginRoot = document.getElementById("login")!;
@@ -114,6 +115,15 @@ function startGame(room: Room) {
     await logout();
   });
 
+  const world = new WorldScene(room);
+  setupTouch({
+    move: (dir) => world.touchMove(dir),
+    interact: () => world.interact(),
+    team: () => openTeamPanel(room),
+    bag: () => openBagPanel(room),
+    chat: () => world.openChat(),
+  });
+
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: "game",
@@ -121,7 +131,7 @@ function startGame(room: Room) {
     pixelArt: true,
     roundPixels: true,
     scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
-    scene: [new WorldScene(room)],
+    scene: [world],
   });
   // acesso para depuração pelo console do navegador
   (window as unknown as { wildora: unknown }).wildora = { game, room };
@@ -136,6 +146,7 @@ function renderHud(p: ProfileMessage) {
 }
 
 async function main() {
+  markTouch();
   let cfg: ServerConfig;
   for (;;) {
     try {

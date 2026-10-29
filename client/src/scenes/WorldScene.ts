@@ -9,14 +9,17 @@ import { grassOverlay, objectArt, objectKey, renderGround } from "../world/art";
 import { ensureAvatar, frameIndex } from "../avatar/sheet";
 import { toast } from "../toast";
 
-/** Zoom da câmera: cada pixel da arte vira um bloco de N pixels na tela. */
-export const WORLD_ZOOM = 3;
+/** Zoom da câmera: cada pixel da arte vira um bloco de N pixels na tela (2 em celular, para ver mais do mapa). */
+export const WORLD_ZOOM = Math.min(window.innerWidth, window.innerHeight) < 520 ? 2 : 3;
 
 /**
  * Tempo de um passo no cliente. Um pouco acima do limite do servidor para nunca
  * esbarrar nele; o servidor ainda aceita pequenas rajadas causadas pela rede.
  */
 const STEP_MS = MOVE_COOLDOWN_MS + 6;
+
+/** Toque: segurando o direcional, o segundo passo só vem depois disso (um toque curto = um passo). */
+const TOUCH_REPEAT_MS = 260;
 
 /** Personagem desenhado no mundo, com o movimento de um tile para o outro. */
 interface Mover {
@@ -56,6 +59,9 @@ export class WorldScene extends Phaser.Scene {
   private held: Direction[] = [];
   /** toque rápido durante um passo: executado assim que o passo termina */
   private buffered: Direction | null = null;
+  /** direcional de toque: quando foi apertado e quantos passos já deu */
+  private touchAt = 0;
+  private touchSteps = -1;
 
   constructor(private room: Room) {
     super("world");
@@ -188,7 +194,12 @@ export class WorldScene extends Phaser.Scene {
     const carry = this.advance(m, dt);
     if (m.moving) return;
 
-    const dir = inputBlocked() ? null : this.heldDirection() ?? this.buffered;
+    let dir = inputBlocked() ? null : this.heldDirection() ?? this.buffered;
+    if (dir && this.touchSteps >= 1 && performance.now() - this.touchAt < TOUCH_REPEAT_MS) {
+      // toque curto: espera um instante antes de repetir o passo
+      this.idle(m, time);
+      return;
+    }
     this.buffered = null;
     if (!dir) {
       this.bumped = null;
@@ -201,6 +212,7 @@ export class WorldScene extends Phaser.Scene {
     const ny = m.ty + dy;
     if (isWalkable(nx, ny)) {
       this.sendMove(dir, nx, ny);
+      if (this.touchSteps >= 0) this.touchSteps += 1;
       m.idleSince = 0;
       this.bumped = null;
       this.startStep(m, nx, ny, dir, carry);
@@ -398,6 +410,36 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------- Entrada ----------
 
+  /** Direcional de toque: segura uma direção (null = soltou). */
+  touchMove(dir: Direction | null) {
+    if (!dir) {
+      this.held = [];
+      this.touchSteps = -1;
+      return;
+    }
+    if (inputBlocked()) return;
+    if (this.held[0] !== dir) {
+      // direção nova (ou arrastou o dedo para outra): conta de novo
+      this.touchAt = performance.now();
+      this.touchSteps = 0;
+    }
+    this.held = [dir];
+    // toque rápido nunca se perde: se estiver no meio de um passo, o próximo já fica guardado
+    this.buffered = dir;
+  }
+
+  interact() {
+    if (!inputBlocked()) this.room.send("interact");
+  }
+
+  /** Abre o chat (botão de toque). */
+  openChat() {
+    this.held = [];
+    document.documentElement.classList.add("chat-open");
+    const input = document.getElementById("chat-input") as HTMLInputElement;
+    input.focus();
+  }
+
   private setupInput() {
     const KEYS: Record<string, Direction> = {
       arrowup: "up",
@@ -473,6 +515,10 @@ export class WorldScene extends Phaser.Scene {
         input.focus();
       }
     });
+
+    const close = () => document.documentElement.classList.remove("chat-open");
+    input.addEventListener("blur", () => window.setTimeout(close, 50));
+    document.querySelector(".chat-close")?.addEventListener("click", () => input.blur());
 
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {

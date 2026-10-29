@@ -7,6 +7,10 @@
 #battle { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center;
   background: rgba(8, 10, 14, 0.72); padding: 12px; font-family: var(--pixel); color: #1f2430; }
 #battle[hidden] { display: none; }
+/* coluna 0..1fr: a moldura nunca fica mais larga que a tela */
+#battle { grid-template-columns: minmax(0, 1fr); justify-items: center;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+.battle-frame { min-width: 0; grid-template-columns: minmax(0, 1fr); }
 .battle-frame { width: min(960px, 100%); max-height: 100%; display: grid; grid-template-rows: 1fr auto;
   border: 4px solid #1f2430; border-radius: 14px; overflow: hidden; background: #1d2433;
   box-shadow: 0 12px 40px #0008; animation: battle-in 0.35s ease-out; }
@@ -76,9 +80,25 @@
 .battle-actions[aria-busy="true"] { visibility: hidden; }
 
 @media (max-width: 640px) {
-  .battle-panel { grid-template-columns: 1fr; }
-  .battle-actions, .battle-actions.moves { grid-template-columns: 1fr 1fr; }
-  .info { min-width: 50%; padding: 4px 8px 6px; }
+  #battle { padding: 8px; }
+  /* aspect-ratio + min-height forçaria uma largura mínima maior que a tela */
+  .battle-field { aspect-ratio: auto; min-height: 0; height: max(210px, 60vw); }
+  .battle-panel { grid-template-columns: minmax(0, 1fr); padding: 10px; gap: 10px; }
+  .battle-actions, .battle-actions.moves, .battle-actions.list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .battle-btn { padding: 12px 6px; min-height: 48px; }
+  .info { min-width: 0; width: 54%; padding: 4px 8px 6px; }
+  .info.player { right: 3%; }
+  .battle-message { padding: 10px 12px; }
+}
+/* Celular deitado: campo mais baixo para caber tudo */
+@media (max-height: 480px) {
+  #battle { padding: 6px; }
+  .battle-frame { grid-template-rows: minmax(0, 1fr) auto; height: 100%; }
+  .battle-field { aspect-ratio: auto; min-height: 0; }
+  .battle-panel { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); min-height: 0; padding: 8px; gap: 8px; }
+  .battle-actions, .battle-actions.moves, .battle-actions.list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 110px; }
+  .battle-btn { padding: 6px; min-height: 0; }
+  .battle-message { font-size: 15px; padding: 6px 10px; }
 }
 
 /* Listas (mochila e troca de criatura) */

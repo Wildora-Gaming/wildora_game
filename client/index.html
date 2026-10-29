@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Wildora</title>
     <meta name="description" content="Wildora: jogo online gratuito de explorar, capturar e treinar criaturas num mundo 2D compartilhado com outros treinadores." />
     <meta name="theme-color" content="#14161c" />
@@ -20,6 +20,7 @@
         --pixel: "Pixelify Sans", system-ui, sans-serif;
       }
       * { box-sizing: border-box; }
+      button { touch-action: manipulation; }
       html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
         font-family: system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
       #game { position: fixed; inset: 0; }
@@ -60,13 +61,14 @@
       <div class="hud-area" id="hud-area">Vila Broto</div>
       <div id="hud-team"></div>
       <div class="hud-money" id="hud-money"></div>
-      <button type="button" id="hud-team-btn">Time (T)</button>
-      <button type="button" id="hud-bag-btn">Mochila (B)</button>
+      <button type="button" id="hud-team-btn">Time<span class="kbd"> (T)</span></button>
+      <button type="button" id="hud-bag-btn">Mochila<span class="kbd"> (B)</span></button>
       <button type="button" id="hud-logout" class="hud-quiet">Sair</button>
       <div class="hud-help">Setas/WASD andar · E interagir · Enter chat · <span id="hud-online">0</span> online <span id="hud-clock"></span></div>
     </div>
 
     <div id="chat">
+      <button type="button" class="chat-close pbtn small ghost">Fechar</button>
       <div id="chat-log"></div>
       <input id="chat-input" maxlength="140" placeholder="Enter para conversar" autocomplete="off" />
     </div>

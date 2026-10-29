@@ -77,7 +77,13 @@ export function isModalOpen(kind?: string) {
 
 export function showDialog(title: string, text: string) {
   const body = el("div", "modal-body dialog");
-  body.append(el("p", "", text), el("small", "hint", "Enter, Espaço ou E para fechar"));
+  const ok = el("button", "pbtn", "OK") as HTMLButtonElement;
+  ok.type = "button";
+  ok.style.justifySelf = "end";
+  ok.addEventListener("click", () => closeModal());
+  body.append(el("p", "", text));
+  if (!document.documentElement.classList.contains("touch")) body.append(el("small", "hint", "Enter, Espaço ou E para fechar"));
+  body.append(ok);
   openModal("dialog", title, body);
 }
 

@@ -1,0 +1,61 @@
+/* Controles de toque (celular/tablet) */
+#touch { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; pointer-events: none;
+  display: flex; justify-content: space-between; align-items: flex-end;
+  padding: 0 max(14px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  font-family: var(--pixel); -webkit-user-select: none; user-select: none; }
+#touch * { -webkit-tap-highlight-color: transparent; }
+
+.dpad { pointer-events: auto; touch-action: none; position: relative; width: 148px; height: 148px; border-radius: 50%;
+  background: rgba(16, 18, 24, 0.42); border: 2px solid rgba(255, 255, 255, 0.22); }
+.dpad-arrow { position: absolute; width: 46px; height: 46px; display: grid; place-items: center; font-size: 18px;
+  color: rgba(255, 255, 255, 0.85); border-radius: 12px; background: rgba(255, 255, 255, 0.10); pointer-events: none; }
+.dpad-arrow.up { left: 51px; top: 6px; }
+.dpad-arrow.down { left: 51px; bottom: 6px; }
+.dpad-arrow.left { left: 6px; top: 51px; }
+.dpad-arrow.right { right: 6px; top: 51px; }
+.dpad-arrow.on { background: #ffd84a; color: #1f2430; }
+.dpad-knob { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28); border: 2px solid rgba(255, 255, 255, 0.4); pointer-events: none; }
+
+.touch-actions { pointer-events: none; display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto auto;
+  gap: 10px; align-items: end; justify-items: end; }
+.t-btn { pointer-events: auto; touch-action: manipulation; font-family: var(--pixel); font-weight: 700; color: #1f2430;
+  border: 3px solid #1f2430; cursor: pointer; box-shadow: inset 0 -4px 0 #0000002e; }
+.t-btn:active { filter: brightness(0.92); transform: translateY(1px); }
+.t-small { grid-column: 1; min-width: 92px; padding: 8px 10px; font-size: 15px; border-radius: 10px; background: #c9d2e3; }
+.t-main { grid-column: 2; grid-row: 2 / span 2; width: 78px; height: 78px; border-radius: 50%; font-size: 30px;
+  background: #ffd84a; }
+
+/* Com teclado virtual aberto (digitando no chat), o direcional some */
+html.touch.chat-open #touch { display: none; }
+
+/* ---------- Ajustes de tela quando é toque ---------- */
+html.touch, html.touch body { overscroll-behavior: none; }
+html.touch #game { touch-action: none; }
+html.touch .kbd, html.touch .hud-help { display: none !important; }
+html.touch #hud-team-btn, html.touch #hud-bag-btn { display: none; }
+html.touch #hud { top: max(8px, env(safe-area-inset-top)); left: 8px; right: 8px; gap: 6px; }
+html.touch #hud > * { font-size: 13px; padding: 4px 8px; }
+
+/* Chat: fechado mostra só as últimas falas; aberto vira um painel no topo */
+html.touch #chat { top: calc(max(8px, env(safe-area-inset-top)) + 62px); bottom: auto; left: 8px; width: min(320px, calc(100vw - 16px));
+  background: transparent; border-color: transparent; padding: 0; pointer-events: none; }
+html.touch #chat input { display: none; }
+html.touch #chat-log { height: auto; max-height: 58px; overflow: hidden; font-size: 12px; text-shadow: 0 1px 2px #000, 0 0 4px #000;
+  display: flex; flex-direction: column; justify-content: flex-end; }
+html.touch.chat-open #chat { background: var(--panel); border-color: var(--line); padding: 8px; pointer-events: auto; z-index: 7;
+  width: calc(100vw - 16px); }
+html.touch.chat-open #chat input { display: block; font-size: 16px; }
+html.touch.chat-open #chat-log { max-height: 30vh; overflow-y: auto; text-shadow: none; display: block; }
+.chat-close { display: none; }
+html.touch.chat-open .chat-close { display: block; align-self: flex-end; }
+
+/* Celular deitado: tudo um pouco menor */
+@media (max-height: 480px) {
+  .dpad { width: 120px; height: 120px; }
+  .dpad-arrow { width: 38px; height: 38px; }
+  .dpad-arrow.up { left: 41px; top: 4px; } .dpad-arrow.down { left: 41px; bottom: 4px; }
+  .dpad-arrow.left { left: 4px; top: 41px; } .dpad-arrow.right { right: 4px; top: 41px; }
+  .t-main { width: 64px; height: 64px; font-size: 24px; }
+  .t-small { min-width: 80px; padding: 6px 8px; font-size: 13px; }
+}
