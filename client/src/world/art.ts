@@ -269,6 +269,14 @@ function drawHouse(variant: number, role?: string) {
     if (role === "heal") {
       px(c, 38, 44, "#e5484d", 4, 7);
       px(c, 36, 46, "#e5484d", 8, 3);
+    } else if (role === "tutor") {
+      // livro aberto: a Casa do Treinador ensina golpes
+      px(c, 34, 45, "#7a5cc4", 12, 6);
+      px(c, 35, 45, "#fffaf0", 4, 5);
+      px(c, 41, 45, "#fffaf0", 4, 5);
+      px(c, 39, 44, OUT, 2, 7);
+      px(c, 36, 47, "#9aa0b4", 2, 1);
+      px(c, 42, 47, "#9aa0b4", 2, 1);
     } else {
       blobShape(c, 40, 47, 3, 3, "#2bb3a3", "#6fd8cc", "#1b8075");
       px(c, 37, 47, OUT, 7, 1);

@@ -75,9 +75,9 @@ test("atributos no nível 5 seguem a fórmula", () => {
 });
 
 test("golpes por nível: os 4 últimos aprendidos", () => {
-  assert.deepEqual(createCreature("leafin", 5).moves, ["investida", "chicote_de_rama"]);
+  assert.deepEqual(createCreature("leafin", 5).moves, ["patada", "chicote_de_rama"]);
   assert.deepEqual(createCreature("leafin", 12).moves, [
-    "investida",
+    "patada",
     "chicote_de_rama",
     "polen_sonolento",
     "mordida_firme",

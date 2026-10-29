@@ -11,6 +11,7 @@ import { setProfile, uiState } from "./ui-state";
 import { toast } from "./toast";
 import { markTouch, setupTouch } from "./touch/touch";
 import { openPlayerMenu, setupTrade, showSocialRequest } from "./panels/social";
+import { openTutor } from "./panels/tutor";
 import { sound } from "./audio/audio";
 import { setupSoundPanel } from "./audio/sound-panel";
 import type {
@@ -112,6 +113,8 @@ function startGame(room: Room) {
   room.onMessage("dialog", (msg: DialogMessage) =>
     afterBattle(() => {
       if (msg.title === "Centro de Cura") sound.jingle("heal");
+      else if (msg.title === "Doce Estelar") sound.jingle("level");
+      else if (msg.title === "Evolução!") sound.jingle("evolve");
       else sound.sfx("ping");
       showDialog(msg.title, msg.text);
     }),
@@ -119,6 +122,10 @@ function startGame(room: Room) {
   room.onMessage("shop", (msg: ShopMessage) => {
     sound.sfx("door");
     openShop(room, msg);
+  });
+  room.onMessage("tutor_open", () => {
+    sound.sfx("door");
+    openTutor(room);
   });
   room.onMessage("gym_offer", (msg: GymOfferMessage) => {
     sound.sfx("door");

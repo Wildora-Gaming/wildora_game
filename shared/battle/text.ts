@@ -92,6 +92,8 @@ export function describeEvent(e: BattleEvent, names: BattleNames, wild = true): 
       return `${e.name} aprendeu ${getMove(e.moveId).name}!`;
     case "evolve":
       return `O quê? ${getSpecies(e.from).name} evoluiu para ${getSpecies(e.to).name}!`;
+    case "found":
+      return `Você encontrou ${getItem(e.itemId)?.name ?? "um item"}!`;
     case "money":
       return `Você ganhou ${e.amount} Sementes.`;
     case "pvp_result":

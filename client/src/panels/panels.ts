@@ -200,7 +200,7 @@ export function openBagPanel(room: Room) {
       const text = el("div", "i-text");
       text.append(el("strong", "", `${item.name} ×${n}`), el("span", "", item.description));
       row.append(itemIcon(id, 36), text);
-      if (item.kind === "heal") row.append(btn(choosing === id ? "Cancelar" : "Usar", () => ((choosing = choosing === id ? null : id), render())));
+      if (item.kind === "heal" || item.kind === "level") row.append(btn(choosing === id ? "Cancelar" : "Usar", () => ((choosing = choosing === id ? null : id), render())));
       else row.append(el("span", "i-note", "Usar em batalha"));
       list.append(row);
     }
@@ -208,8 +208,9 @@ export function openBagPanel(room: Room) {
     if (choosing) {
       body.append(el("p", "hint", `Em quem usar ${getItem(choosing)?.name}?`));
       const targets = el("div", "c-list");
+      const levelItem = getItem(choosing)?.kind === "level";
       p.team.forEach((c, i) => {
-        const full = c.hp >= c.maxHp || c.hp <= 0;
+        const full = levelItem ? c.level >= 60 || c.hp <= 0 : c.hp >= c.maxHp || c.hp <= 0;
         targets.append(
           creatureRow(c, [btn("Usar aqui", () => { room.send("use_item", { itemId: choosing, target: i }); choosing = null; }, "", full)], true),
         );

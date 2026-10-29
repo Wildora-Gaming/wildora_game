@@ -79,6 +79,11 @@ com `?toque=1` no endereço.
   da vila, das rotas, da noite, de batalha e de ginásio, vinhetas de vitória, cura, captura, subida de
   nível e evolução, e efeitos de golpe, desmaio, Orbi, grama e menus. Botão **Som** no topo ajusta
   música e efeitos (fica salvo no navegador).
+- **Doce Estelar**: sobe uma criatura 1 nível na hora (com golpes novos e evolução). Na Loja,
+  como prêmio de ginásio, sempre ao vencer criatura selvagem de nível 10+ e às vezes nas menores.
+- **Casa do Treinador** (telhado verde, ao sul da praça): troca golpes por outros que a criatura já
+  pode saber pelo nível, inclusive golpes esquecidos. De graça.
+- **Golpe básico próprio de cada criatura** (Patada, Arranhão, Rabada, Mordiscada, Coice...).
 - **Centro de Cura**, **Loja** (Orbis e Poções) e **Sementes** ganhas em batalha.
 - **Ciclo dia/noite** (20 min, 6 de noite): à noite aparecem Shado e Batto.
 - Multiplayer em tempo real com chat; quem está em batalha mostra um "!".

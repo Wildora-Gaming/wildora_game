@@ -29,11 +29,23 @@ function potionSvg(id: string) {
 </svg>`;
 }
 
+function candySvg() {
+  return `<svg viewBox="0 0 16 16" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+<path fill="#2a2233" d="M0 4h3v1h1V4h1V3h6v1h1v1h1V4h3v8h-3v-1h-1v1h-1v1H5v-1H4v-1H3v1H0z"/>
+<path fill="#f08bb8" d="M1 5h2v1h1v4H3v1H1z"/><path fill="#f08bb8" d="M13 5h2v6h-2v-1h-1V6h1z"/>
+<path fill="#c25a8c" d="M1 9h2v1H1z"/><path fill="#c25a8c" d="M13 9h2v1h-2z"/>
+<path fill="#f2c53d" d="M5 4h6v1h1v6h-1v1H5v-1H4V5h1z"/>
+<path fill="#c4952f" d="M5 10h6v1H5z"/>
+<path fill="#fff6d6" d="M7 5h2v2h2v2H9v2H7V9H5V7h2z"/>
+<path fill="#fff" d="M7 7h2v2H7z"/>
+</svg>`;
+}
+
 export function itemIcon(id: string, size = 32): HTMLElement {
   const span = document.createElement("span");
   span.className = "item-icon";
   span.style.width = `${size}px`;
   span.style.height = `${size}px`;
-  span.innerHTML = id.startsWith("orbi") ? orbSvg(id) : potionSvg(id);
+  span.innerHTML = id.startsWith("orbi") ? orbSvg(id) : id === "doce_estelar" ? candySvg() : potionSvg(id);
   return span;
 }

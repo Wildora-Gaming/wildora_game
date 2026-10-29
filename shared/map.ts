@@ -26,7 +26,7 @@ export interface MapObject {
   /** variação visual (cor do telhado etc.) */
   variant: number;
   /** função especial: Centro de Cura, Loja */
-  role?: "heal" | "shop" | "gym";
+  role?: "heal" | "shop" | "gym" | "tutor";
   /** ginásio deste prédio ou deste líder */
   gymId?: string;
   /** NPC: aparência e nome */
@@ -169,13 +169,15 @@ function buildWorld() {
   rect(52, 29, 1, 2, Tile.Path); // trilha até a porta da Loja
   place("house", 41, 26, 0, true, { role: "heal" });
   place("house", 50, 26, 1, true, { role: "shop" });
-  place("house", 41, 44, 2, true);
+  rect(39, 42, 1, 6, Tile.Path); // trilha da praça até a porta da Casa do Treinador
+  rect(39, 47, 5, 1, Tile.Path);
+  place("house", 41, 44, 2, true, { role: "tutor" }); // Casa do Treinador: troca de golpes
   place("house", 50, 44, 3, true);
   place("house", 33, 31, 1, true);
   place("well", 47, 34 - 1, 0, true);
   for (const [x, y] of [[40, 31], [55, 31], [40, 42], [55, 42]]) place("lamp", x, y, 0, true);
   place("sign", 46, 39, 0, true, {
-    text: "Vila Broto. Centro de Cura: casa de telhado vermelho. Loja: telhado azul. A grama alta das campinas esconde criaturas selvagens!",
+    text: "Vila Broto. Centro de Cura: casa de telhado vermelho. Loja: telhado azul. Casa do Treinador (telhado verde, ao sul da praça): troque os golpes das suas criaturas. A grama alta das campinas esconde criaturas selvagens!",
   });
   place("sign", 22, 34, 0, true, { text: "Campina Norte, subindo a trilha. Orla do Bosque ao sul." });
   place("sign", 64, 34, 0, true, { text: "Campos do Leste e Lago Espelho ao norte. Pradaria Sul descendo a estrada." });

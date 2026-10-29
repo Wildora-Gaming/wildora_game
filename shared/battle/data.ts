@@ -36,6 +36,26 @@ const move = (
 export const MOVES = {
   // Fera
   investida: move("investida", "Investida", "fera", 40, 100),
+  // golpe básico próprio de cada criatura (o mais fraco do repertório)
+  patada: move("patada", "Patada", "fera", 40, 100),
+  arranhao: move("arranhao", "Arranhão", "fera", 40, 100),
+  rabada: move("rabada", "Rabada", "fera", 40, 100),
+  mordiscada: move("mordiscada", "Mordiscada", "fera", 35, 100, { effect: { status: "assustado", chance: 0.1 } }),
+  coice: move("coice", "Coice", "fera", 40, 100),
+  cabecada: move("cabecada", "Cabeçada", "pedra", 40, 100),
+  esbarrao: move("esbarrao", "Esbarrão", "fera", 40, 100),
+  rolada_de_la: move("rolada_de_la", "Rolada de Lã", "fera", 40, 100),
+  barrigada: move("barrigada", "Barrigada", "fera", 40, 100),
+  cabecada_de_chapeu: move("cabecada_de_chapeu", "Cabeçada de Chapéu", "fera", 40, 100),
+  bicada: move("bicada", "Bicada", "vento", 35, 100),
+  sopro_leve: move("sopro_leve", "Sopro Leve", "vento", 35, 100),
+  raiz_rasteira: move("raiz_rasteira", "Raiz Rasteira", "flora", 35, 100),
+  // Zebri
+  galope: move("galope", "Galope", "fera", 45, 100, { priority: 1 }),
+  listras_hipnoticas: move("listras_hipnoticas", "Listras Hipnóticas", "fera", null, 80, {
+    effect: { status: "assustado", chance: 1 },
+  }),
+  pisoteio: move("pisoteio", "Pisoteio", "fera", 75, 90, { effect: { status: "assustado", chance: 0.2 } }),
   mordida_firme: move("mordida_firme", "Mordida Firme", "fera", 60, 95),
   golpe_bruto: move("golpe_bruto", "Golpe Bruto", "fera", 80, 85),
   presa_toxica: move("presa_toxica", "Presa Tóxica", "fera", 50, 95, { effect: { status: "envenenado", chance: 0.3 } }),
@@ -113,11 +133,11 @@ const species = (
 ): SpeciesDef => ({ id, name, types, base: { hp, atk, def, spe }, baseXp, catchRate, learnset, evolvesTo });
 
 // Linhas das iniciais
-const LEAFIN_MOVES: [number, MoveId][] = [[1, "investida"], [1, "chicote_de_rama"], [7, "polen_sonolento"], [12, "mordida_firme"], [18, "folha_navalha"], [34, "golpe_bruto"]];
-const FLAMBO_MOVES: [number, MoveId][] = [[1, "investida"], [1, "fagulha"], [9, "mordida_firme"], [18, "labareda"], [34, "pedregulho"]];
-const AQUARI_MOVES: [number, MoveId][] = [[1, "investida"], [1, "jato_dagua"], [10, "bolhas"], [18, "onda"], [34, "golpe_bruto"]];
-const ZAPPI_MOVES: [number, MoveId][] = [[1, "investida"], [1, "choque_piscante"], [8, "onda_estatica"], [14, "mordida_firme"], [20, "descarga"]];
-const ROCKY_MOVES: [number, MoveId][] = [[1, "investida"], [3, "rolagem_de_casco"], [12, "mordida_firme"], [20, "pedregulho"]];
+const LEAFIN_MOVES: [number, MoveId][] = [[1, "patada"], [1, "chicote_de_rama"], [7, "polen_sonolento"], [12, "mordida_firme"], [18, "folha_navalha"], [34, "golpe_bruto"]];
+const FLAMBO_MOVES: [number, MoveId][] = [[1, "arranhao"], [1, "fagulha"], [9, "mordida_firme"], [18, "labareda"], [34, "pedregulho"]];
+const AQUARI_MOVES: [number, MoveId][] = [[1, "rabada"], [1, "jato_dagua"], [10, "bolhas"], [18, "onda"], [34, "golpe_bruto"]];
+const ZAPPI_MOVES: [number, MoveId][] = [[1, "esbarrao"], [1, "choque_piscante"], [8, "onda_estatica"], [14, "mordida_firme"], [20, "descarga"]];
+const ROCKY_MOVES: [number, MoveId][] = [[1, "cabecada"], [3, "rolagem_de_casco"], [12, "mordida_firme"], [20, "pedregulho"]];
 
 export const SPECIES: Record<string, SpeciesDef> = {
   leafin: species("leafin", "Leafin", ["flora"], [50, 40, 60, 30], 64, 0.2, LEAFIN_MOVES, { species: "leafox", level: 16 }),
@@ -133,8 +153,8 @@ export const SPECIES: Record<string, SpeciesDef> = {
   aquarion: species("aquarion", "Aquarion", ["mare"], [88, 82, 82, 78], 236, 0.05, AQUARI_MOVES),
 
   // Campina
-  pawly: species("pawly", "Pawly", ["fera"], [45, 45, 40, 50], 50, 0.6, [[1, "investida"], [6, "mordida_firme"], [14, "presa_toxica"], [22, "golpe_bruto"]]),
-  chirpy: species("chirpy", "Chirpy", ["vento"], [38, 45, 32, 65], 50, 0.6, [[1, "investida"], [3, "rasante"], [16, "vendaval"]]),
+  pawly: species("pawly", "Pawly", ["fera"], [45, 45, 40, 50], 50, 0.6, [[1, "mordiscada"], [6, "mordida_firme"], [14, "presa_toxica"], [22, "golpe_bruto"]]),
+  chirpy: species("chirpy", "Chirpy", ["vento"], [38, 45, 32, 65], 50, 0.6, [[1, "bicada"], [3, "rasante"], [16, "vendaval"]]),
   rocky: species("rocky", "Rocky", ["pedra"], [45, 40, 70, 20], 56, 0.5, ROCKY_MOVES, { species: "rockor", level: 18 }),
   rockor: species("rockor", "Rockor", ["pedra"], [62, 55, 92, 28], 130, 0.2, ROCKY_MOVES, { species: "rockolos", level: 36 }),
   rockolos: species("rockolos", "Rockolos", ["pedra"], [85, 75, 115, 35], 220, 0.05, ROCKY_MOVES),
@@ -144,15 +164,15 @@ export const SPECIES: Record<string, SpeciesDef> = {
   shado: species("shado", "Shado", ["espectro", "brasa"], [40, 55, 40, 55], 90, 0.15, [[1, "lamento"], [4, "fagulha"], [16, "assombro"], [24, "labareda"]]),
 
   // Bosque
-  sprouty: species("sprouty", "Sprouty", ["flora"], [50, 42, 55, 35], 54, 0.55, [[1, "investida"], [3, "chicote_de_rama"], [9, "esporos"], [18, "folha_navalha"]]),
-  shroomy: species("shroomy", "Shroomy", ["flora", "pedra"], [55, 48, 62, 25], 62, 0.45, [[1, "investida"], [1, "esporos"], [10, "rolagem_de_casco"], [20, "folha_navalha"]]),
+  sprouty: species("sprouty", "Sprouty", ["flora"], [50, 42, 55, 35], 54, 0.55, [[1, "raiz_rasteira"], [3, "chicote_de_rama"], [9, "esporos"], [18, "folha_navalha"]]),
+  shroomy: species("shroomy", "Shroomy", ["flora", "pedra"], [55, 48, 62, 25], 62, 0.45, [[1, "cabecada_de_chapeu"], [1, "esporos"], [10, "rolagem_de_casco"], [20, "folha_navalha"]]),
   batto: species("batto", "Batto", ["espectro", "vento"], [42, 50, 38, 66], 70, 0.35, [[1, "rasante"], [5, "lamento"], [15, "assombro"], [22, "vendaval"]]),
 
   // Campos do leste e do lago
-  woolly: species("woolly", "Woolly", ["faisca"], [58, 40, 58, 38], 60, 0.5, [[1, "investida"], [4, "onda_estatica"], [8, "choque_piscante"], [20, "descarga"]]),
-  zebri: species("zebri", "Zebri", ["fera"], [50, 58, 42, 64], 62, 0.45, [[1, "investida"], [6, "mordida_firme"], [16, "golpe_bruto"]]),
-  fluffi: species("fluffi", "Fluffi", ["vento"], [48, 42, 48, 56], 58, 0.5, [[1, "investida"], [5, "rasante"], [18, "vendaval"]]),
-  baleo: species("baleo", "Baleo", ["mare"], [85, 50, 52, 28], 90, 0.3, [[1, "investida"], [1, "jato_dagua"], [15, "onda"], [25, "golpe_bruto"]]),
+  woolly: species("woolly", "Woolly", ["faisca"], [58, 40, 58, 38], 60, 0.5, [[1, "rolada_de_la"], [4, "onda_estatica"], [8, "choque_piscante"], [20, "descarga"]]),
+  zebri: species("zebri", "Zebri", ["fera"], [50, 58, 42, 64], 62, 0.45, [[1, "coice"], [6, "galope"], [12, "listras_hipnoticas"], [18, "pisoteio"]]),
+  fluffi: species("fluffi", "Fluffi", ["vento"], [48, 42, 48, 56], 58, 0.5, [[1, "sopro_leve"], [5, "rasante"], [18, "vendaval"]]),
+  baleo: species("baleo", "Baleo", ["mare"], [85, 50, 52, 28], 90, 0.3, [[1, "barrigada"], [1, "jato_dagua"], [15, "onda"], [25, "golpe_bruto"]]),
 };
 
 export type SpeciesId = string;

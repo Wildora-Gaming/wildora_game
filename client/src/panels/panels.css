@@ -66,6 +66,7 @@
   .c-actions { grid-column: 1 / -1; grid-auto-flow: column; }
   .i-row { grid-template-columns: 36px 1fr; }
   .i-buy { grid-column: 1 / -1; justify-content: space-between; }
+  .i-row > .pbtn, .i-row > .i-note { grid-column: 1 / -1; justify-self: end; }
   .stepper .pbtn { min-width: 38px; min-height: 36px; font-size: 18px; }
 }
 
@@ -91,3 +92,14 @@
 .trade-wait { margin: 0; padding: 18px 12px; border: 2px dashed #c9c1ad; border-radius: 10px; text-align: center; color: #5b6272; }
 .trade-status { margin: 0; font-weight: 700; font-size: 16px; }
 @media (max-width: 560px) { .trade-cols { grid-template-columns: minmax(0, 1fr); } .trade-pick { max-height: 32vh; } }
+
+/* Casa do Treinador */
+.tutor-section { display: grid; gap: 8px; }
+.tutor-section h3 { margin: 4px 0 0; font-size: 17px; text-transform: uppercase; }
+.tutor-list { display: grid; gap: 6px; }
+.tutor-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px;
+  background: #fffaf0; border: 2px solid #c9c1ad; border-radius: 10px; }
+.tutor-row.on { border-color: #1f2430; background: #ffe38a; }
+.tutor-row .pbtn { margin-left: auto; }
+.tutor-move { font-size: 14px; font-weight: 700; }
+.tutor-info { font-family: system-ui, sans-serif; font-size: 12px; color: #5b6272; }

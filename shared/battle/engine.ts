@@ -184,6 +184,7 @@ export type BattleEvent =
   | { t: "learn"; name: string; moveId: string }
   | { t: "evolve"; from: string; to: string }
   | { t: "money"; amount: number }
+  | { t: "found"; itemId: string }
   | { t: "sent"; where: "team" | "box"; name: string }
   | { t: "pvp_result"; outcome: "win" | "lose" | "draw"; reason: PvpEndReason; opponent: string }
   | { t: "end"; result: BattleResult };
@@ -233,6 +234,7 @@ export function isValidAction(state: BattleState, action: unknown): action is Ac
       const item = getItem(a.itemId);
       if (!item) return false;
       if (item.kind === "orb") return state.wild;
+      if (item.kind !== "heal") return false; // Doce Estelar só fora de batalha
       const target = a.target === undefined ? state.active : a.target;
       if (!isIndex(target, state.team.length)) return false;
       const c = state.team[target as number];

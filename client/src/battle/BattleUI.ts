@@ -234,7 +234,7 @@ export class BattleUI {
   private showMainMenu() {
     this.message.textContent = `O que ${this.player.name} vai fazer?`;
     this.actions.className = "battle-actions main";
-    const usable = !this.pvp && Object.entries(this.bag).some(([id, n]) => n > 0 && getItem(id));
+    const usable = !this.pvp && Object.entries(this.bag).some(([id, n]) => n > 0 && getItem(id) && getItem(id)!.kind !== "level");
     const canSwitch = this.team.some((c, i) => i !== this.active && c.hp > 0);
     this.actions.replaceChildren(
       button("Lutar", "fight", () => this.showMoves()),
@@ -264,7 +264,7 @@ export class BattleUI {
   private showBag() {
     this.message.textContent = "Usar qual item?";
     this.actions.className = "battle-actions list";
-    const entries = Object.entries(this.bag).filter(([id, n]) => n > 0 && getItem(id));
+    const entries = Object.entries(this.bag).filter(([id, n]) => n > 0 && getItem(id) && getItem(id)!.kind !== "level");
     const buttons = entries.map(([id, n]) => {
       const item = getItem(id)!;
       const isOrb = item.kind === "orb";
@@ -445,6 +445,9 @@ export class BattleUI {
         break;
       case "caught":
         sound.jingle("caught");
+        break;
+      case "found":
+        sound.sfx("buy");
         break;
       case "level":
         sound.jingle("level");

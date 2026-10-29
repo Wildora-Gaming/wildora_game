@@ -300,8 +300,8 @@ async function main() {
   for (const t of TYPES) if (t !== "profile") back.onMessage(t, () => {});
   await waitFor(() => prof.length > 0, "perfil");
   const aqView = prof[0].team.find((c: any) => c.speciesId === "aquari");
-  assert.deepEqual(aqView.moves.map((m: any) => m.id), ["investida", "jato_dagua", "bolhas"]);
-  ok("Aquari antigo troca Mordida Firme por Bolhas ao entrar");
+  assert.deepEqual(aqView.moves.map((m: any) => m.id), ["rabada", "jato_dagua", "bolhas"]);
+  ok("Aquari antigo troca Investida por Rabada e Mordida Firme por Bolhas ao entrar");
   await back.leave();
 
   await gameServer.gracefullyShutdown(false);

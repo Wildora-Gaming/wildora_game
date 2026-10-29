@@ -1,6 +1,6 @@
 // Itens da mochila.
 
-export type ItemKind = "orb" | "heal";
+export type ItemKind = "orb" | "heal" | "level";
 
 export interface ItemDef {
   id: string;
@@ -9,7 +9,7 @@ export interface ItemDef {
   description: string;
   /** preço na loja em Sementes; null = não vende */
   price: number | null;
-  /** orb: bônus de captura · heal: Vida recuperada */
+  /** orb: bônus de captura · heal: Vida recuperada · level: níveis ganhos */
   power: number;
 }
 
@@ -40,9 +40,17 @@ export const ITEMS: Record<string, ItemDef> = {
     price: 450,
     power: 60,
   },
+  doce_estelar: {
+    id: "doce_estelar",
+    name: "Doce Estelar",
+    kind: "level",
+    description: "Sobe uma criatura 1 nível na hora (fora de batalha).",
+    price: 800,
+    power: 1,
+  },
 };
 
-export const SHOP_ITEMS = ["orbi", "orbi_prata", "pocao", "super_pocao"];
+export const SHOP_ITEMS = ["orbi", "orbi_prata", "pocao", "super_pocao", "doce_estelar"];
 
 export const STARTING_BAG: Record<string, number> = { orbi: 5, pocao: 3 };
 export const STARTING_MONEY = 500;
@@ -50,6 +58,13 @@ export const STARTING_MONEY = 500;
 export function getItem(id: unknown): ItemDef | null {
   return typeof id === "string" && Object.prototype.hasOwnProperty.call(ITEMS, id) ? ITEMS[id] : null;
 }
+
+/**
+ * Doce Estelar ao vencer criatura selvagem: nível 10 ou mais sempre deixa um;
+ * abaixo disso, 1 chance em 10.
+ */
+export const CANDY_LEVEL = 10;
+export const CANDY_CHANCE_LOW = 0.1;
 
 /** Sementes ganhas ao vencer uma criatura. */
 export function moneyReward(level: number) {

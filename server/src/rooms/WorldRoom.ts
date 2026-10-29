@@ -52,8 +52,8 @@ import { rollWild, zoneAt } from "../../../shared/creatures";
 import { getGym, gymStages, type Gym } from "../../../shared/gyms";
 import { TYPE_LABEL } from "../../../shared/battle/types";
 import { sanitizeLook } from "../../../shared/avatar/look";
-import { STARTERS, STARTER_LEVEL, getSpecies, isSpeciesId } from "../../../shared/battle/data";
-import { SHOP_ITEMS, STARTING_BAG, STARTING_MONEY, getItem, moneyReward } from "../../../shared/items";
+import { STARTERS, STARTER_LEVEL, getMove, getSpecies, isSpeciesId } from "../../../shared/battle/data";
+import { CANDY_CHANCE_LOW, CANDY_LEVEL, SHOP_ITEMS, STARTING_BAG, STARTING_MONEY, getItem, moneyReward } from "../../../shared/items";
 import {
   activeOf,
   awardExperience,
@@ -61,7 +61,12 @@ import {
   chooseTrainerAction,
   chooseWildAction,
   createCreature,
+  evolveIfReady,
+  gainXp,
   healFully,
+  MAX_LEVEL,
+  MAX_MOVES,
+  xpForLevel,
   isValidAction,
   resolveTurn,
   startBattle,
@@ -166,22 +171,31 @@ function newTrainer(id: string, name: string, look: unknown, starterRaw: unknown
 }
 
 /**
- * Golpes que mudaram de lugar no aprendizado: criaturas antigas trocam pelo golpe novo.
- * (Aquari aprendia Mordida Firme, igual ao Pawly; agora aprende Bolhas.)
+ * Golpes que mudaram no aprendizado: criaturas já salvas trocam pelo golpe novo ao entrar.
+ * - Investida (igual para todos) virou o golpe básico próprio de cada espécie.
+ * - Aquari: Mordida Firme (do Pawly) virou Bolhas.
+ * - Zebri: Mordida Firme e Golpe Bruto (do Pawly) viraram Galope e Pisoteio.
  */
-const MOVE_SWAPS: { species: string[]; from: string; to: string }[] = [
-  { species: ["aquari", "aquarel", "aquarion"], from: "mordida_firme", to: "bolhas" },
-];
+const MOVE_SWAPS: Record<string, Record<string, string>> = {
+  aquari: { mordida_firme: "bolhas" },
+  aquarel: { mordida_firme: "bolhas" },
+  aquarion: { mordida_firme: "bolhas" },
+  zebri: { mordida_firme: "galope", golpe_bruto: "pisoteio" },
+};
 function migrateMoves(t: Trainer): boolean {
   let changed = false;
   for (const c of [...t.team, ...t.box]) {
-    for (const swap of MOVE_SWAPS) {
-      const i = c.moves.indexOf(swap.from);
-      if (!swap.species.includes(c.speciesId) || i < 0) continue;
-      if (c.moves.includes(swap.to)) c.moves.splice(i, 1);
-      else c.moves[i] = swap.to;
-      changed = true;
+    const species = getSpecies(c.speciesId);
+    const swaps: Record<string, string> = { ...(MOVE_SWAPS[c.speciesId] ?? {}) };
+    const basic = species.learnset[0]?.[1];
+    if (basic && basic !== "investida" && !species.learnset.some(([, id]) => id === "investida")) swaps.investida = basic;
+    const next: string[] = [];
+    for (const id of c.moves) {
+      const to = swaps[id] ?? id;
+      if (to !== id) changed = true;
+      if (!next.includes(to)) next.push(to);
     }
+    c.moves = next;
   }
   return changed;
 }
@@ -237,6 +251,7 @@ export class WorldRoom extends Room<WorldState> {
     this.onMessage("trade_confirm", (client) => this.handleTradeConfirm(client));
     this.onMessage("trade_cancel", (client) => this.endTrade(client.sessionId, "cancel"));
     this.onMessage("set_look", (client, m: unknown) => this.handleSetLook(client, m));
+    this.onMessage("tutor_teach", (client, m: unknown) => this.handleTutorTeach(client, m));
     this.onMessage("*", () => {});
   }
 
@@ -523,6 +538,14 @@ export class WorldRoom extends Room<WorldState> {
       const money = stage ? stage.reward : moneyReward(battle.foe.level);
       t.money += money;
       events.push({ t: "money", amount: money });
+      // vencer criatura selvagem pode deixar um Doce Estelar
+      if (battle.wild && battle.result === "win") {
+        const lvl = battle.foe.level;
+        if (lvl >= CANDY_LEVEL || this.rng() < CANDY_CHANCE_LOW) {
+          t.bag.doce_estelar = (t.bag.doce_estelar ?? 0) + 1;
+          events.push({ t: "found", itemId: "doce_estelar" });
+        }
+      }
       events.push(end);
       if (s.gymRun && battle.result === "win") next = this.advanceGym(client, player, s);
     } else if (battle.result === "lose") {
@@ -681,6 +704,8 @@ export class WorldRoom extends Room<WorldState> {
         this.store.markDirty(s.trainer);
         this.sendProfile(client);
         dialog("Centro de Cura", "Seu time foi totalmente recuperado. Volte sempre que precisar!");
+      } else if (obj.role === "tutor") {
+        client.send("tutor_open", {});
       } else {
         const msg: ShopMessage = {
           items: SHOP_ITEMS.map((id) => {
@@ -746,9 +771,10 @@ export class WorldRoom extends Room<WorldState> {
     const item = getItem(m?.itemId);
     const t = r.s.trainer;
     const target = Number(m?.target);
-    if (!item || item.kind !== "heal" || (t.bag[item.id] ?? 0) <= 0) return;
+    if (!item || item.kind === "orb" || (t.bag[item.id] ?? 0) <= 0) return;
     if (!Number.isInteger(target) || target < 0 || target >= t.team.length) return;
     const c = t.team[target];
+    if (item.kind === "level") return this.useLevelItem(client, t, c, item.id);
     const max = calcStats(c).maxHp;
     if (c.hp >= max) return this.notice(client, "Essa criatura já está com a Vida cheia.");
     c.hp = Math.min(max, c.hp + item.power);
@@ -757,6 +783,69 @@ export class WorldRoom extends Room<WorldState> {
     this.store.markDirty(t);
     this.sendProfile(client);
     this.notice(client, `${getSpecies(c.speciesId).name} recuperou Vida.`);
+  }
+
+  /** Doce Estelar: sobe 1 nível na hora (golpes novos e evolução incluídos). */
+  private useLevelItem(client: Client, t: Trainer, c: Creature, itemId: string) {
+    const before = getSpecies(c.speciesId).name;
+    if (c.level >= MAX_LEVEL) return this.notice(client, `${before} já está no nível máximo.`);
+    if (c.hp <= 0) return this.notice(client, `${before} está desmaiado. Cure no Centro de Cura antes.`);
+    const { levels, learned } = gainXp(c, xpForLevel(c.level + 1) - c.xp);
+    const evo = evolveIfReady(c);
+    t.bag[itemId] -= 1;
+    if (t.bag[itemId] <= 0) delete t.bag[itemId];
+    if (evo) {
+      if (!t.dex.seen.includes(evo.to)) t.dex.seen.push(evo.to);
+      if (!t.dex.caught.includes(evo.to)) t.dex.caught.push(evo.to);
+    }
+    const parts = [`${before} subiu para o nível ${levels.at(-1) ?? c.level}!`];
+    for (const id of learned) parts.push(`Aprendeu ${getMove(id).name}.`);
+    if (evo) parts.push(`O quê? ${before} evoluiu para ${getSpecies(evo.to).name}!`);
+    this.store.markDirty(t);
+    this.sendProfile(client);
+    const msg: DialogMessage = { title: evo ? "Evolução!" : "Doce Estelar", text: parts.join(" ") };
+    client.send("dialog", msg);
+  }
+
+  // ---------- Casa do Treinador: troca de golpes ----------
+
+  private nearRole(player: Player, role: string) {
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0], [0, 0]]) {
+      const o = objectAt(player.x + dx, player.y + dy);
+      if (o?.role === role) return true;
+    }
+    return false;
+  }
+
+  /** Ensina um golpe que a criatura já pode saber (pelo nível) no lugar de outro, ou numa vaga livre. */
+  private handleTutorTeach(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r || r.s.battle || r.s.duel || r.s.trade) return;
+    if (!this.nearRole(r.player, "tutor")) return;
+    const m = message as { index?: unknown; moveId?: unknown; replace?: unknown } | null;
+    const t = r.s.trainer;
+    const index = Number(m?.index);
+    if (!Number.isInteger(index) || index < 0 || index >= t.team.length) return;
+    const c = t.team[index];
+    const moveId = typeof m?.moveId === "string" ? m.moveId : "";
+    const learnable = getSpecies(c.speciesId).learnset.some(([lvl, id]) => id === moveId && lvl <= c.level);
+    if (!learnable || c.moves.includes(moveId)) return;
+    const replace = Number(m?.replace);
+    const name = getSpecies(c.speciesId).name;
+    let text: string;
+    if (replace === -1) {
+      if (c.moves.length >= MAX_MOVES) return;
+      c.moves.push(moveId);
+      text = `${name} aprendeu ${getMove(moveId).name}.`;
+    } else {
+      if (!Number.isInteger(replace) || replace < 0 || replace >= c.moves.length) return;
+      const old = c.moves[replace];
+      c.moves[replace] = moveId;
+      text = `${name} esqueceu ${getMove(old).name} e aprendeu ${getMove(moveId).name}.`;
+    }
+    this.store.markDirty(t);
+    this.sendProfile(client);
+    this.notice(client, text);
   }
 
   private handleTeamOrder(client: Client, message: unknown) {
