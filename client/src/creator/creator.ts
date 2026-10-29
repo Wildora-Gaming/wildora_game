@@ -23,6 +23,7 @@ import { SPECIES, STARTERS, type SpeciesId } from "../../../shared/battle/data";
 import { TYPE_COLOR, TYPE_LABEL, type TypeId } from "../../../shared/battle/types";
 import { drawAvatar } from "../avatar/sheet";
 import { creatureArt } from "../creature-art";
+import { uiState } from "../ui-state";
 
 export interface CreatorResult {
   mode: "login" | "register";
@@ -106,6 +107,166 @@ function textInput(value: string, placeholder: string, type = "text") {
   i.maxLength = type === "password" ? 64 : 16;
   i.autocomplete = type === "password" ? "current-password" : "username";
   return i;
+}
+
+/** Linhas de estilo e cor do personagem. getLook/setLook ligam ao estado de quem usa. */
+function buildOptions(optionsBody: HTMLElement, getLook: () => Look, setLook: (l: Look) => void) {
+  const rows: (() => void)[] = [];
+  const refresh = () => rows.forEach((r) => r());
+
+  const styleRow = (label: string, field: keyof Look, styles: readonly string[], dir: AvatarDir = "down") => {
+    const row = el("div", "opt-row");
+    row.append(el("div", "opt-label", label));
+    const list = el("div", "opt-styles");
+    row.append(list);
+    const render = () => {
+      const look = getLook();
+      list.replaceChildren(
+        ...styles.map((s, i) => {
+          const b = el("button", "style-chip");
+          b.type = "button";
+          b.title = STYLE_LABEL[s] ?? s;
+          b.setAttribute("aria-pressed", String(look[field] === i));
+          b.append(avatarCanvas({ ...look, [field]: i }, dir, 3), el("span", "", STYLE_LABEL[s] ?? s));
+          b.addEventListener("click", () => {
+            setLook({ ...getLook(), [field]: i });
+            refresh();
+          });
+          return b;
+        }),
+      );
+    };
+    rows.push(render);
+    optionsBody.append(row);
+  };
+
+  const colorRow = (label: string, field: keyof Look, swatches: Swatch[]) => {
+    const row = el("div", "opt-row");
+    row.append(el("div", "opt-label", label));
+    const list = el("div", "opt-swatches");
+    row.append(list);
+    const render = () => {
+      const look = getLook();
+      list.replaceChildren(
+        ...swatches.map(([color], i) => {
+          const b = el("button", "swatch");
+          b.type = "button";
+          b.style.background = color;
+          b.title = `${label} ${i + 1}`;
+          b.setAttribute("aria-pressed", String(look[field] === i));
+          b.addEventListener("click", () => {
+            setLook({ ...getLook(), [field]: i });
+            refresh();
+          });
+          return b;
+        }),
+      );
+    };
+    rows.push(render);
+    optionsBody.append(row);
+  };
+
+  colorRow("Pele", "skin", SKIN_COLORS);
+  styleRow("Cabelo", "hair", HAIR_STYLES);
+  colorRow("Cor", "hairColor", HAIR_COLORS);
+  styleRow("Olhos", "eyes", EYE_STYLES);
+  colorRow("Cor", "eyeColor", EYE_COLORS);
+  styleRow("Roupa", "top", TOP_STYLES);
+  colorRow("Cor", "topColor", CLOTH_COLORS);
+  styleRow("Parte de baixo", "bottom", BOTTOM_STYLES);
+  colorRow("Cor", "bottomColor", CLOTH_COLORS);
+  colorRow("Sapatos", "shoesColor", CLOTH_COLORS);
+  styleRow("Chapéu", "hat", HAT_STYLES);
+  colorRow("Cor", "hatColor", CLOTH_COLORS);
+  refresh();
+  return { refresh };
+}
+
+/** Prévia animada (frente, lado e costas) do visual atual. */
+function buildStage(getLook: () => Look) {
+  const stage = el("div", "stage");
+  const views = (["down", "left", "up"] as AvatarDir[]).map((dir) => ({ dir, canvas: avatarCanvas(getLook(), dir, 7) }));
+  for (const v of views) stage.append(v.canvas);
+  let tick = 0;
+  const cycle: (typeof AVATAR_FRAMES)[number][] = ["stepA", "stand", "stepB", "stand"];
+  const anim = window.setInterval(() => {
+    tick++;
+    for (const v of views) {
+      const ctx = v.canvas.getContext("2d")!;
+      ctx.clearRect(0, 0, v.canvas.width, v.canvas.height);
+      drawAvatar(ctx, getLook(), v.dir, cycle[tick % 4], 0, 0, 7);
+    }
+  }, 180);
+  return { stage, stop: () => window.clearInterval(anim) };
+}
+
+/**
+ * Editor de visual durante o jogo (mesmas opções da criação).
+ * Devolve o visual novo, ou null se cancelou.
+ */
+export function editLook(current: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const root = el("div");
+    root.id = "look-editor";
+    document.body.append(root);
+    uiState.modalOpen = true;
+    let look = parseLook(current);
+
+    const shell = el("div", "creator");
+    const head = el("header", "creator-head");
+    head.append(el("h1", "", "Seu visual"), el("span", "step", "Os outros jogadores veem na hora"));
+
+    const options = el("section", "panel options");
+    options.append(el("h2", "", "Personalização do personagem"));
+    const optionsBody = el("div", "panel-body");
+    options.append(optionsBody);
+    const { refresh } = buildOptions(optionsBody, () => look, (l) => (look = l));
+
+    const preview = el("section", "panel preview");
+    preview.append(el("h2", "", "Prévia"));
+    const previewBody = el("div", "panel-body");
+    const { stage, stop } = buildStage(() => look);
+    const actions = el("div", "preview-actions");
+    const random = el("button", "btn ghost", "Aleatório");
+    random.type = "button";
+    const saveBtn = el("button", "btn primary", "Salvar");
+    saveBtn.type = "button";
+    actions.append(random, saveBtn);
+    const cancel = el("button", "btn ghost", "Cancelar");
+    cancel.type = "button";
+    cancel.style.width = "100%";
+    cancel.style.marginTop = "10px";
+    previewBody.append(stage, actions, cancel);
+    preview.append(previewBody);
+
+    const finish = (value: string | null) => {
+      stop();
+      root.remove();
+      uiState.modalOpen = false;
+      window.removeEventListener("keydown", onKey, true);
+      resolve(value);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") finish(null);
+      e.stopPropagation();
+    };
+    window.addEventListener("keydown", onKey, true);
+    random.addEventListener("click", () => {
+      look = randomLook();
+      refresh();
+    });
+    saveBtn.addEventListener("click", () => {
+      const encoded = encodeLook(look);
+      save({ look: encoded });
+      finish(encoded);
+    });
+    cancel.addEventListener("click", () => finish(null));
+
+    const body = el("div", "creator-body");
+    body.append(options, preview);
+    shell.append(head, body);
+    root.append(shell);
+  });
 }
 
 export function runCreator(root: HTMLElement, opts: StartOptions = {}): Promise<CreatorResult> {
@@ -231,73 +392,7 @@ export function runCreator(root: HTMLElement, opts: StartOptions = {}): Promise<
       });
       head.append(toWelcome);
 
-      const rows: (() => void)[] = [];
-      const refresh = () => rows.forEach((r) => r());
-
-      const styleRow = (label: string, field: keyof Look, styles: readonly string[], dir: AvatarDir = "down") => {
-        const row = el("div", "opt-row");
-        row.append(el("div", "opt-label", label));
-        const list = el("div", "opt-styles");
-        row.append(list);
-        const render = () => {
-          list.replaceChildren(
-            ...styles.map((s, i) => {
-              const b = el("button", "style-chip");
-              b.type = "button";
-              b.title = STYLE_LABEL[s] ?? s;
-              b.setAttribute("aria-pressed", String(look[field] === i));
-              b.append(avatarCanvas({ ...look, [field]: i }, dir, 3), el("span", "", STYLE_LABEL[s] ?? s));
-              b.addEventListener("click", () => {
-                look = { ...look, [field]: i };
-                refresh();
-              });
-              return b;
-            }),
-          );
-        };
-        rows.push(render);
-        optionsBody.append(row);
-      };
-
-      const colorRow = (label: string, field: keyof Look, swatches: Swatch[]) => {
-        const row = el("div", "opt-row");
-        row.append(el("div", "opt-label", label));
-        const list = el("div", "opt-swatches");
-        row.append(list);
-        const render = () => {
-          list.replaceChildren(
-            ...swatches.map(([color], i) => {
-              const b = el("button", "swatch");
-              b.type = "button";
-              b.style.background = color;
-              b.title = `${label} ${i + 1}`;
-              b.setAttribute("aria-pressed", String(look[field] === i));
-              b.addEventListener("click", () => {
-                look = { ...look, [field]: i };
-                refresh();
-              });
-              return b;
-            }),
-          );
-        };
-        rows.push(render);
-        optionsBody.append(row);
-      };
-
-      colorRow("Pele", "skin", SKIN_COLORS);
-      styleRow("Cabelo", "hair", HAIR_STYLES);
-      colorRow("Cor", "hairColor", HAIR_COLORS);
-      styleRow("Olhos", "eyes", EYE_STYLES);
-      colorRow("Cor", "eyeColor", EYE_COLORS);
-      styleRow("Roupa", "top", TOP_STYLES);
-      colorRow("Cor", "topColor", CLOTH_COLORS);
-      styleRow("Parte de baixo", "bottom", BOTTOM_STYLES);
-      colorRow("Cor", "bottomColor", CLOTH_COLORS);
-      colorRow("Sapatos", "shoesColor", CLOTH_COLORS);
-      styleRow("Chapéu", "hat", HAT_STYLES);
-      colorRow("Cor", "hatColor", CLOTH_COLORS);
-      refresh();
-
+      const { refresh } = buildOptions(optionsBody, () => look, (l) => (look = l));
       random.addEventListener("click", () => {
         look = randomLook();
         refresh();

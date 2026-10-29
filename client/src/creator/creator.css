@@ -1,6 +1,8 @@
 /* Criador de personagem: painéis no estilo da folha de referência
    (cabeçalho azul-marinho, corpo creme, contornos escuros). */
-#login { position: fixed; inset: 0; z-index: 10; overflow-y: auto; padding: 20px 16px 32px;
+#look-editor { z-index: 26; }
+#login { z-index: 10; }
+#login, #look-editor { position: fixed; inset: 0; overflow-y: auto; padding: 20px 16px 32px;
   background:
     radial-gradient(circle at 20% 10%, #2c4a3a 0%, transparent 45%),
     radial-gradient(circle at 85% 90%, #233a5c 0%, transparent 50%),

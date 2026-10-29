@@ -101,6 +101,7 @@ interface Session {
   /** troca em andamento */
   trade: Trade | null;
   lastSocialAt: number;
+  lastLookAt: number;
 }
 
 /** Batalha entre dois jogadores (as sessões nos lugares 0 e 1). */
@@ -235,6 +236,7 @@ export class WorldRoom extends Room<WorldState> {
     this.onMessage("trade_offer", (client, m: unknown) => this.handleTradeOffer(client, m));
     this.onMessage("trade_confirm", (client) => this.handleTradeConfirm(client));
     this.onMessage("trade_cancel", (client) => this.endTrade(client.sessionId, "cancel"));
+    this.onMessage("set_look", (client, m: unknown) => this.handleSetLook(client, m));
     this.onMessage("*", () => {});
   }
 
@@ -321,6 +323,7 @@ export class WorldRoom extends Room<WorldState> {
       duel: null,
       trade: null,
       lastSocialAt: 0,
+      lastLookAt: 0,
     });
     trainer.lastSeen = Date.now();
     this.sendProfile(client);
@@ -787,6 +790,20 @@ export class WorldRoom extends Room<WorldState> {
     }
     this.store.markDirty(t);
     this.sendProfile(client);
+  }
+
+  // ---------- Visual ----------
+
+  private handleSetLook(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r || r.s.battle || r.s.duel) return;
+    const now = Date.now();
+    if (now - r.s.lastLookAt < 1000) return;
+    r.s.lastLookAt = now;
+    const look = sanitizeLook((message as { look?: unknown } | null)?.look);
+    r.s.trainer.look = look;
+    r.player.look = look;
+    this.store.markDirty(r.s.trainer);
   }
 
   // ---------- Entre jogadores: pedidos ----------

@@ -4,7 +4,7 @@ import "./battle/battle.css";
 import { connect, loadServerConfig, type ServerConfig } from "./network";
 import { WorldScene } from "./scenes/WorldScene";
 import { BattleUI } from "./battle/BattleUI";
-import { runCreator, type StartOptions } from "./creator/creator";
+import { editLook, runCreator, type StartOptions } from "./creator/creator";
 import { makeSupabase, readEmailLink, runAuth } from "./auth/auth";
 import { openBagPanel, openGymOffer, openShop, openTeamPanel, showDialog } from "./panels/panels";
 import { setProfile, uiState } from "./ui-state";
@@ -143,6 +143,15 @@ function startGame(room: Room) {
   document.getElementById("hud-team-btn")!.addEventListener("click", () => openTeamPanel(room));
   document.getElementById("hud-bag-btn")!.addEventListener("click", () => openBagPanel(room));
   setupSoundPanel();
+  document.getElementById("hud-look")!.addEventListener("click", async () => {
+    if (uiState.inBattle || uiState.modalOpen) return;
+    const mine = room.state.players.get(room.sessionId);
+    const look = await editLook(mine?.look ?? "");
+    if (look && look !== mine?.look) {
+      room.send("set_look", { look });
+      toast("Visual atualizado!");
+    }
+  });
   // clique em botões da interface (não os da batalha, que têm sons próprios nos eventos)
   document.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement | null)?.closest("button");

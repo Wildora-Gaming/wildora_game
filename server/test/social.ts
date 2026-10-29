@@ -112,6 +112,13 @@ async function main() {
   trainerOf(A.room).team.push(extra);
   const hpBefore = trainerOf(A.room).team.map((c: any) => c.hp);
 
+  // ---------- Trocar visual ----------
+  A.room.send("set_look", { look: "2.7.0.1.3.0.4.2.6.9.1.5" });
+  await waitFor(() => B.room.state.players.get(A.room.sessionId)?.look === "2.7.0.1.3.0.4.2.6.9.1.5", "B vê o visual novo");
+  assert.equal(trainerOf(A.room).look, "2.7.0.1.3.0.4.2.6.9.1.5");
+  ok("trocar visual: salva e os outros veem na hora");
+  await sleep(1100);
+
   // ---------- Pedido e recusa ----------
   A.room.send("social_request", { target: B.room.sessionId, kind: "battle" });
   await waitFor(() => B.inbox.social_request.length === 1, "pedido chega");
