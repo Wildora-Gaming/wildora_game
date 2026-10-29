@@ -1,7 +1,8 @@
 // Aparência do personagem: opções, paletas e validação.
 // Usado pelo servidor (validar) e pelo cliente (criador e desenho).
 
-export const HAIR_STYLES = ["curto", "espetado", "franja", "rabo", "longo", "coque", "cacheado"] as const;
+// novos estilos entram no fim: os visuais já salvos guardam o número da posição
+export const HAIR_STYLES = ["curto", "espetado", "franja", "rabo", "longo", "coque", "cacheado", "careca"] as const;
 export const EYE_STYLES = ["redondo", "cilios", "sereno", "feliz"] as const;
 export const TOP_STYLES = ["camiseta", "jaqueta", "regata", "moletom"] as const;
 export const BOTTOM_STYLES = ["calca", "bermuda", "saia"] as const;
@@ -15,6 +16,7 @@ export const STYLE_LABEL: Record<string, string> = {
   longo: "Longo",
   coque: "Coque",
   cacheado: "Cacheado",
+  careca: "Careca",
   redondo: "Redondo",
   cilios: "Com cílios",
   sereno: "Sereno",
