@@ -14,6 +14,16 @@ export const MOVE_BURST = 8;
 /** Chance de encontro a cada passo na grama alta (0–1). */
 export const ENCOUNTER_CHANCE = 0.12;
 
+// ---------------- Evento dos lendários ----------------
+
+/** Intervalo entre um lendário e o próximo (sorteado entre os dois). */
+export const LEGEND_INTERVAL_MS: [number, number] = [2 * 60 * 60 * 1000, 3 * 60 * 60 * 1000];
+/** Primeiro lendário depois que o servidor (a sala) abre. */
+export const LEGEND_FIRST_MS: [number, number] = [20 * 60 * 1000, 40 * 60 * 1000];
+/** Quanto tempo o lendário fica no mapa. */
+export const LEGEND_DURATION_MS = 15 * 60 * 1000;
+export const LEGEND_LEVEL: [number, number] = [45, 50];
+
 export const CHAT_MAX_LENGTH = 140;
 export const CHAT_COOLDOWN_MS = 700;
 export const NAME_MAX_LENGTH = 16;

@@ -37,6 +37,21 @@ TUNING = {
     "batto": {"colors": 12},
     "zebri": {"colors": 9},
 }
+# Folha 2 (criaturas novas): desenhada maior, reduz mais
+for _sid in ["terravin", "terravor", "aurabit", "aurabolt", "nimblo", "nimblor", "verdely", "verdelar", "pyraxis",
+             "pyraxor", "zefril", "zefrion", "luminel", "luminella", "bellune", "bellunis", "drakosh", "drakoshar",
+             "venturi", "venturion", "marinor", "marinox", "voltuga", "voltugon"]:
+    TUNING[_sid] = {"factor": 2.6, "colors": 11}
+# Folha 3: desenhos menores
+for _sid in ["zephyl", "zephiro", "zephyrax", "mosseroo", "musgaroo", "musgalor", "bubblit", "bubbelle", "bubbelora",
+             "spinora", "spinarra", "spinatrix", "muddle", "lamudo", "lamaroth", "petallia", "petalis", "petaliora",
+             "ignicub", "ignurso", "ignurgo", "shadeleaf", "shademoss", "shadegrove", "frostitt", "frostorr",
+             "frostarok", "tangleo", "tanglora", "tanglodon", "slitheria", "slitherion", "slitheragon", "ironclad",
+             "ironback", "ironfort"]:
+    TUNING[_sid] = {"factor": 1.9, "colors": 11}
+# Lendários
+for _sid in ["solvaris", "nocteon", "abyssion", "terralith"]:
+    TUNING[_sid] = {"factor": 1.85, "colors": 14}
 
 OUTLINE = (34, 28, 44)
 CHARS = "abcdefghijklmnopqrstuvwxyz"

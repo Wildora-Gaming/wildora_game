@@ -1,7 +1,9 @@
 import Phaser from "phaser";
 import { getStateCallbacks, type Room } from "colyseus.js";
 import { MOVE_COOLDOWN_MS, TILE_SIZE, DIRECTION_DELTA, type ChatBroadcast, type Direction } from "../../../shared/constants";
-import { MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH, Tile, isWalkable, tileAt } from "../../../shared/map";
+import { LEGEND_SPOTS, MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH, Tile, isWalkable, isWildTile, tileAt } from "../../../shared/map";
+import { SPECIES } from "../../../shared/battle/data";
+import { nativeCanvas } from "../creature-art";
 import { inputBlocked } from "../ui-state";
 import { openBagPanel, openTeamPanel } from "../panels/panels";
 import { areaName } from "../../../shared/creatures";
@@ -177,7 +179,9 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private arrived(m: Mover) {
-    const grass = tileAt(m.tx, m.ty) === Tile.TallGrass;
+    const tile = tileAt(m.tx, m.ty);
+    const grass = isWildTile(tile);
+    if (grass) m.grass.setTexture(this.grassKey(tile));
     m.grass.setVisible(grass);
     if (grass && m === this.me) sound.sfx("grass");
     if (m === this.me) this.updateArea(m.tx, m.ty);
@@ -302,6 +306,13 @@ export class WorldScene extends Phaser.Scene {
       this.held = [];
     });
 
+    // Lendário do evento
+    $(this.room.state).listen("legend", (legend: any) => {
+      if (!legend) return;
+      $(legend).onChange(() => this.syncLegend(legend));
+      this.syncLegend(legend, true);
+    });
+
     // Dia e noite
     const night = document.getElementById("night");
     const clock = document.getElementById("hud-clock");
@@ -310,6 +321,53 @@ export class WorldScene extends Phaser.Scene {
       sound.setNight(isNight);
       if (clock) clock.textContent = isNight ? "· Noite" : "· Dia";
     });
+  }
+
+  // ---------- Lendário ----------
+
+  private legendView: { id: string; body: Phaser.GameObjects.Container; label: Phaser.GameObjects.Text; tween: Phaser.Tweens.Tween } | null = null;
+
+  /** Mostra, troca ou tira o lendário do mapa conforme o estado do servidor. */
+  private syncLegend(legend: any, first = false) {
+    const id: string = legend.speciesId ?? "";
+    const view = this.legendView;
+    if (view && (view.id !== id || !id)) {
+      view.tween.stop();
+      view.body.destroy();
+      this.legendView = null;
+    }
+    if (!id) return;
+    const sp = SPECIES[id];
+    if (!this.legendView) {
+      const key = `legend-${id}`;
+      if (!this.textures.exists(key)) this.textures.addCanvas(key, nativeCanvas(id, sp.types));
+      const x = px(legend.x);
+      const y = py(legend.y);
+      const glow = this.add.ellipse(0, -2, 40, 12, 0xffe27a, 0.35);
+      const shadow = this.add.ellipse(0, -1, 30, 8, 0x000000, 0.25);
+      const img = this.add.image(0, -2, key).setOrigin(0.5, 1);
+      const label = this.add
+        .text(0, -img.height - 6, sp.name, {
+          fontFamily: '"Pixelify Sans", system-ui, sans-serif',
+          fontSize: "15px",
+          color: "#ffd84a",
+          stroke: "#1f1a24",
+          strokeThickness: 4,
+        })
+        .setOrigin(0.5, 1)
+        .setScale(1 / WORLD_ZOOM);
+      const body = this.add.container(x, y, [glow, shadow, img, label]).setDepth(y);
+      const tween = this.tweens.add({ targets: [img, label], y: "-=3", duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.tweens.add({ targets: glow, alpha: 0.1, duration: 1100, yoyo: true, repeat: -1 });
+      this.legendView = { id, body, label, tween };
+      if (!first || Date.now() < legend.endsAt) {
+        toast(`✦ ${sp.name} apareceu ${LEGEND_SPOTS[id]?.at ?? ""}!`, 4000);
+        sound.sfx("ping");
+      }
+    }
+    const v = this.legendView!;
+    v.body.setAlpha(legend.busy ? 0.55 : 1);
+    v.label.setText(legend.busy ? `${sp.name} (em batalha)` : sp.name);
   }
 
   private syncLook(m: Mover, player: any) {
@@ -368,6 +426,13 @@ export class WorldScene extends Phaser.Scene {
     if (!first) toast(name, 1800);
   }
 
+  /** Textura das moitas na frente das pernas, na cor da grama alta daquele bioma. */
+  private grassKey(tile: Tile) {
+    const key = `grass-overlay-${tile}`;
+    if (!this.textures.exists(key)) this.textures.addCanvas(key, grassOverlay(tile));
+    return key;
+  }
+
   private createMover(player: any, isMe: boolean, sessionId: string): Mover {
     const textureKey = ensureAvatar(this, player.look || "");
     const dir = (player.dir as Direction) ?? "down";
@@ -393,9 +458,9 @@ export class WorldScene extends Phaser.Scene {
       .setScale(1 / WORLD_ZOOM);
     const battleIcon = this.add.container(9, -24, [bubble, mark]).setVisible(Boolean(player.inBattle));
 
-    if (!this.textures.exists("grass-overlay")) this.textures.addCanvas("grass-overlay", grassOverlay());
-    const grass = this.add.image(0, 0, "grass-overlay").setOrigin(0.5, 1);
-    grass.setVisible(tileAt(player.x, player.y) === Tile.TallGrass);
+    const startTile = tileAt(player.x, player.y);
+    const grass = this.add.image(0, 0, this.grassKey(isWildTile(startTile) ? startTile : Tile.TallGrass)).setOrigin(0.5, 1);
+    grass.setVisible(isWildTile(startTile));
     const body = this.add.container(px(player.x), py(player.y), [shadow, sprite, grass, label, battleIcon]);
     body.setDepth(body.y);
 

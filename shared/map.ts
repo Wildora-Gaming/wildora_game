@@ -12,9 +12,24 @@ export enum Tile {
   Water = 3,
   Sand = 4,
   Flowers = 5,
+  // Expansão do leste
+  Snow = 6,
+  Ash = 7,
+  Moss = 8,
+  /** grama alta de cada bioma (todas dão encontros) */
+  FrostGrass = 9,
+  EmberGrass = 10,
+  GlowGrass = 11,
+  SeaGrass = 12,
+  Lava = 13,
+  Ice = 14,
 }
 
-export type ObjectKind = "tree" | "pine" | "house" | "rock" | "fence" | "lamp" | "sign" | "bush" | "well" | "gym" | "npc";
+/** Tiles com criaturas selvagens escondidas. */
+export const WILD_TILES: ReadonlySet<Tile> = new Set([Tile.TallGrass, Tile.FrostGrass, Tile.EmberGrass, Tile.GlowGrass, Tile.SeaGrass]);
+export const isWildTile = (t: Tile) => WILD_TILES.has(t);
+
+export type ObjectKind = "tree" | "pine" | "house" | "rock" | "fence" | "lamp" | "sign" | "bush" | "well" | "gym" | "npc" | "palm" | "mushroom";
 
 export interface MapObject {
   kind: ObjectKind;
@@ -40,7 +55,9 @@ export interface MapObject {
 const GYM_COLS = [14, 26, 60, 72];
 const GYM_ROWS = [73, 81];
 
-export const MAP_WIDTH = 96;
+/** Largura da área original (Vila Broto e arredores). A expansão do leste começa aqui. */
+export const EAST_X = 96;
+export const MAP_WIDTH = 176;
 export const MAP_HEIGHT = 96;
 
 export const SPAWN = { x: 47, y: 37 };
@@ -60,6 +77,8 @@ const FOOTPRINT: Record<ObjectKind, [number, number]> = {
   well: [2, 1],
   gym: [7, 4],
   npc: [1, 1],
+  palm: [1, 1],
+  mushroom: [1, 1],
 };
 
 function mulberry32(seed: number) {
@@ -71,8 +90,9 @@ function mulberry32(seed: number) {
   };
 }
 
-function buildWorld() {
-  const W = MAP_WIDTH;
+/** Área original: gerada exatamente como antes (mesma semente, mesma largura), para não mudar nada nela. */
+function buildVillage() {
+  const W = EAST_X;
   const H = MAP_HEIGHT;
   const rng = mulberry32(20261028);
   const ground: Tile[] = new Array(W * H).fill(Tile.Grass);
@@ -252,6 +272,167 @@ function buildWorld() {
   // garante que a estrada e o spawn fiquem sempre livres
   blocked[SPAWN.y * W + SPAWN.x] = false;
 
+  return { ground, blocked, objects };
+}
+
+/** Onde cada lendário aparece durante o evento (clareira no meio do bioma). */
+export const LEGEND_SPOTS: Record<string, { x: number; y: number; region: string; /** "na Planície Gelada", "no Bosque Encantado" */ at: string }> = {
+  solvaris: { x: 114, y: 13, region: "Planície Gelada", at: "na Planície Gelada" },
+  nocteon: { x: 156, y: 14, region: "Bosque Encantado", at: "no Bosque Encantado" },
+  terralith: { x: 112, y: 76, region: "Encosta Vulcânica", at: "na Encosta Vulcânica" },
+  abyssion: { x: 150, y: 74, region: "Costa dos Recifes", at: "na Costa dos Recifes" },
+};
+
+/** Posto de Cura da expansão, no cruzamento das estradas. */
+const OUTPOST = { x: 137, y: 32 };
+
+function buildWorld() {
+  const old = buildVillage();
+  const W = MAP_WIDTH;
+  const H = MAP_HEIGHT;
+  const ground: Tile[] = new Array(W * H).fill(Tile.Grass);
+  const blocked: boolean[] = new Array(W * H).fill(false);
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < EAST_X; x++) {
+      ground[y * W + x] = old.ground[y * EAST_X + x];
+      blocked[y * W + x] = old.blocked[y * EAST_X + x];
+    }
+  // passagem para o leste: tira as árvores da borda em volta da estrada
+  const gate = { x0: 84, x1: EAST_X, y0: 33, y1: 40 };
+  const objects = old.objects.filter((o) => !(o.x + o.w > gate.x0 && o.x < gate.x1 && o.y + o.h > gate.y0 && o.y < gate.y1 && o.kind !== "sign"));
+  for (let y = gate.y0; y < gate.y1; y++) for (let x = gate.x0; x < gate.x1; x++) blocked[y * W + x] = false;
+  for (const o of objects) for (let j = o.y; j < o.y + o.h; j++) for (let i = o.x; i < o.x + o.w; i++) blocked[j * W + i] = true;
+  for (let i = 0; i < W * H; i++) if (ground[i] === Tile.Water) blocked[i] = true;
+
+  const rng = mulberry32(20261029);
+  const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H;
+  const get = (x: number, y: number) => ground[y * W + x];
+  const set = (x: number, y: number, t: Tile) => {
+    if (inside(x, y) && x >= EAST_X - 6) ground[y * W + x] = t;
+  };
+  const rect = (x: number, y: number, w: number, h: number, t: Tile) => {
+    for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) set(i, j, t);
+  };
+  const blob = (cx: number, cy: number, rx: number, ry: number, t: Tile, only?: Tile) => {
+    for (let j = Math.floor(cy - ry - 1); j <= cy + ry + 1; j++)
+      for (let i = Math.floor(cx - rx - 1); i <= cx + rx + 1; i++) {
+        const d = ((i - cx) / rx) ** 2 + ((j - cy) / ry) ** 2;
+        if (d <= 1 - 0.18 + rng() * 0.36 && inside(i, j) && (only === undefined || get(i, j) === only)) set(i, j, t);
+      }
+  };
+
+  // --- Biomas (estradas cortam ao meio: x 134-135 e y 36-37) ---
+  const X0 = EAST_X;
+  const ROAD_X = 134;
+  rect(X0, 0, ROAD_X - X0, 36, Tile.Snow); // Planície Gelada
+  rect(ROAD_X + 2, 0, W - ROAD_X - 2, 36, Tile.Moss); // Bosque Encantado
+  rect(X0, 38, ROAD_X - X0, H - 38, Tile.Ash); // Encosta Vulcânica
+  rect(ROAD_X + 2, 38, W - ROAD_X - 2, H - 38, Tile.Sand); // Costa dos Recifes
+  // transição suave com a área antiga
+  for (let y = 0; y < H; y++) for (let x = X0; x < X0 + 3; x++) if (rng() < 0.5 - (x - X0) * 0.15) set(x, y, Tile.Grass);
+
+  // Planície Gelada: lago congelado e campos de gelo
+  blob(118, 24, 7, 4, Tile.Ice);
+  blob(104, 8, 4, 3, Tile.Ice);
+  blob(108, 18, 6, 4, Tile.FrostGrass, Tile.Snow);
+  blob(126, 10, 5, 4, Tile.FrostGrass, Tile.Snow);
+  blob(104, 29, 5, 3, Tile.FrostGrass, Tile.Snow);
+  blob(126, 29, 4, 3, Tile.FrostGrass, Tile.Snow);
+  // Bosque Encantado: lagoa e clareiras brilhantes
+  blob(164, 26, 5, 4, Tile.Water);
+  blob(145, 10, 5, 4, Tile.GlowGrass, Tile.Moss);
+  blob(163, 9, 4, 3, Tile.GlowGrass, Tile.Moss);
+  blob(148, 26, 6, 4, Tile.GlowGrass, Tile.Moss);
+  blob(157, 21, 3, 2, Tile.GlowGrass, Tile.Moss);
+  // Encosta Vulcânica: rios de lava e capim seco
+  blob(122, 84, 6, 4, Tile.Lava);
+  blob(101, 62, 3, 5, Tile.Lava);
+  blob(110, 50, 6, 4, Tile.EmberGrass, Tile.Ash);
+  blob(125, 62, 5, 5, Tile.EmberGrass, Tile.Ash);
+  blob(106, 86, 5, 3, Tile.EmberGrass, Tile.Ash);
+  blob(118, 68, 3, 2, Tile.EmberGrass, Tile.Ash);
+  // Costa dos Recifes: mar a leste com recifes e algas na areia
+  for (let y = 38; y < H; y++) {
+    const shore = 160 + Math.round(Math.sin(y / 5) * 2 + rng() * 1.5);
+    rect(shore, y, W - shore, 1, Tile.Water);
+  }
+  blob(145, 48, 6, 4, Tile.SeaGrass, Tile.Sand);
+  blob(144, 84, 5, 3, Tile.SeaGrass, Tile.Sand);
+  blob(156, 60, 3, 5, Tile.SeaGrass, Tile.Sand);
+  blob(141, 66, 3, 3, Tile.SeaGrass, Tile.Sand);
+
+  // --- Estradas ---
+  rect(84, 36, W - 6 - 84, 2, Tile.Path); // continuação da estrada leste-oeste
+  rect(ROAD_X, 4, 2, H - 8, Tile.Path); // estrada norte-sul da expansão
+  // clareira de cada lendário (chão do bioma, sem grama alta) e trilha até a estrada
+  const floorAt = (x: number, y: number) => (y < 36 ? (x < ROAD_X ? Tile.Snow : Tile.Moss) : x < ROAD_X ? Tile.Ash : Tile.Sand);
+  for (const spot of Object.values(LEGEND_SPOTS)) {
+    for (let j = spot.y - 2; j <= spot.y + 2; j++) for (let i = spot.x - 3; i <= spot.x + 3; i++) set(i, j, floorAt(i, j));
+  }
+  // Posto de Cura no cruzamento
+  rect(OUTPOST.x + 2, OUTPOST.y + 3, 1, 1, Tile.Path);
+
+  const free = (x: number, y: number, w: number, h: number) => {
+    for (let j = y; j < y + h; j++)
+      for (let i = x; i < x + w; i++) {
+        if (!inside(i, j) || i < EAST_X || blocked[j * W + i]) return false;
+        const t = get(i, j);
+        if (t !== Tile.Snow && t !== Tile.Moss && t !== Tile.Ash && t !== Tile.Sand && t !== Tile.Grass) return false;
+      }
+    for (const spot of Object.values(LEGEND_SPOTS))
+      if (x + w > spot.x - 4 && x < spot.x + 4 && y + h > spot.y - 3 && y < spot.y + 3) return false;
+    return true;
+  };
+  const nearPath = (x: number, y: number, w: number, h: number, d: number) => {
+    for (let j = y - d; j < y + h + d; j++)
+      for (let i = x - d; i < x + w + d; i++) if (inside(i, j) && get(i, j) === Tile.Path) return true;
+    return false;
+  };
+  const place = (kind: ObjectKind, x: number, y: number, variant = 0, force = false, extra: Partial<MapObject> = {}) => {
+    const [w, h] = FOOTPRINT[kind];
+    if (!force && !free(x, y, w, h)) return false;
+    objects.push({ kind, x, y, w, h, variant, ...extra });
+    for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (inside(i, j)) blocked[j * W + i] = true;
+    return true;
+  };
+
+  place("house", OUTPOST.x, OUTPOST.y, 0, true, { role: "heal" });
+  place("sign", 92, 34, 0, true, {
+    text: "Expansão do Leste. Ao norte da estrada: Planície Gelada e Bosque Encantado. Ao sul: Encosta Vulcânica e Costa dos Recifes. Criaturas de nível 12 a 26. Posto de Cura no cruzamento.",
+  });
+  place("sign", ROAD_X - 2, 34, 0, true, {
+    text: "Cruzamento do Leste. Norte: Planície Gelada (oeste) e Bosque Encantado (leste). Sul: Encosta Vulcânica (oeste) e Costa dos Recifes (leste). Dizem que criaturas lendárias aparecem nas clareiras de cada bioma.",
+  });
+
+  // --- Borda (norte, sul e leste) ---
+  for (let y = 0; y < H; y++)
+    for (let x = EAST_X; x < W; x += 1) {
+      const edge = Math.min(y, W - 1 - x, H - 1 - y);
+      if (edge < 2 || (edge < 4 && rng() < 0.45)) {
+        const t = get(x, y);
+        if (t === Tile.Snow) place("pine", x, y, 1);
+        else if (t === Tile.Moss) place(rng() < 0.6 ? "tree" : "pine", x, y, rng() < 0.6 ? 3 : 0);
+        else if (t === Tile.Ash) place("rock", x, y, 2);
+        else if (t === Tile.Sand) place("palm", x, y, 0);
+      }
+    }
+  // --- Vegetação de cada bioma ---
+  const scatter = (n: number, x0: number, y0: number, x1: number, y1: number, pick: () => [ObjectKind, number]) => {
+    for (let k = 0; k < n; k++) {
+      const x = x0 + Math.floor(rng() * (x1 - x0));
+      const y = y0 + Math.floor(rng() * (y1 - y0));
+      if (nearPath(x, y, 2, 1, 2)) continue;
+      const [kind, v] = pick();
+      place(kind, x, y, v);
+    }
+  };
+  scatter(120, X0 + 2, 2, ROAD_X, 35, () => (rng() < 0.75 ? ["pine", 1] : ["rock", 0]));
+  scatter(150, ROAD_X + 2, 2, W - 2, 35, () => { const r = rng(); return r < 0.5 ? ["tree", 3] : r < 0.8 ? ["mushroom", 0] : ["pine", 0]; });
+  scatter(110, X0 + 2, 39, ROAD_X, H - 2, () => { const r = rng(); return r < 0.5 ? ["rock", 2] : r < 0.8 ? ["tree", 4] : ["rock", 0]; });
+  scatter(70, ROAD_X + 2, 39, 160, H - 2, () => (rng() < 0.7 ? ["palm", 0] : ["rock", 0]));
+
+  for (let i = 0; i < W * H; i++) if (ground[i] === Tile.Water || ground[i] === Tile.Lava) blocked[i] = true;
+  blocked[SPAWN.y * W + SPAWN.x] = false;
   return { ground, blocked, objects };
 }
 

@@ -58,10 +58,18 @@ com `?toque=1` no endereço.
   mochila, Sementes, Criaturopédia e insígnias. Cada criatura guarda quem a capturou e onde.
 - **Criador de personagem** com prévia ao vivo: pele, 7 cabelos, 4 olhos, 4 roupas, 3 partes de
   baixo, 3 chapéus e paletas de cor. Os outros jogadores veem o seu visual.
-- **3 iniciais** (Leafin, Flambo, Aquari) e **25 criaturas**, com evoluções nos níveis 16/32 e 18/36.
-- **Mundo 96×96** com a Vila Broto, 4 zonas de grama alta com criaturas e níveis próprios
-  (Campina Norte, Campos do Leste, Pradaria Sul, Orla do Bosque), Lago Espelho e bosque.
-- **Batalha por turnos** decidida no servidor: 8 tipos, mesmo tipo ×1,5, críticos, precisão,
+- **3 iniciais** (Leafin, Flambo, Aquari) e **89 criaturas** em 43 linhas evolutivas, incluindo
+  4 lendários.
+- **Mundo 176×96**: a Vila Broto com 4 zonas de grama alta (Campina Norte, Campos do Leste,
+  Pradaria Sul, Orla do Bosque), Lago Espelho e bosque, e a **Expansão do Leste** pela estrada:
+  Planície Gelada, Bosque Encantado, Encosta Vulcânica e Costa dos Recifes (níveis 12 a 26), cada
+  bioma com chão, grama alta e vegetação próprios, e um Posto de Cura no cruzamento.
+- **Evento dos lendários**: a cada 2 a 3 horas um lendário (Solvaris, Nocteon, Terralith ou
+  Abyssion) aparece na clareira do seu bioma por 15 minutos, com aviso no chat. O primeiro a chegar
+  enfrenta (nível 45 a 50, difícil de capturar); quem chega depois espera a vez. Fugir deixa ele
+  livre para o próximo, com o dano que levou. Capturado ou vencido, some até o próximo evento.
+- **Batalha por turnos** decidida no servidor: 13 tipos (Veneno, Gelo, Luz, Psíquico e Sombrio
+  são os novos; cada tipo é fraco contra exatamente 2), mesmo tipo ×1,5, críticos, precisão,
   prioridade, 5 estados, fuga, troca de criatura, itens e troca forçada quando alguém desmaia.
 - **Captura com Orbi** (Orbi, Orbi Prata, Orbi Ouro), chance maior com Vida baixa e estados.
 - **XP dividido** entre quem lutou, subida de nível, golpes novos e **evolução**.
@@ -98,6 +106,7 @@ npm run build     # compila o cliente em client/dist
 ```
 
 Para testar a noite sem esperar: `WILDORA_TIME_OFFSET=<ms> npm run dev` adianta o relógio do jogo.
+Para ver um lendário sem esperar horas: `WILDORA_LEGEND_MS=10000 npm run dev` faz o evento começar 10 s depois de abrir a sala.
 
 ## Arte
 
@@ -174,6 +183,5 @@ docs/DEPLOY.md             como colocar no ar
 ## Próximos passos sugeridos
 
 - Ranking de batalhas amistosas e lista de amigos
-- Segundo bioma e mapas feitos no Tiled
-- Sons e música
+- Mapas feitos no Tiled
 - Ranking e perfil público lendo as tabelas do Supabase

@@ -89,13 +89,27 @@ function water(c: Ctx, ox: number, oy: number, tx: number, ty: number) {
   if (!isW(tx + 1, ty)) px(c, ox + TILE - 2, oy, foam, 2, TILE);
 }
 
-function tallGrass(c: Ctx, ox: number, oy: number, tx: number, ty: number, withBase = true) {
-  if (withBase) px(c, ox, oy, "#5aa84a", TILE, TILE);
+/** Cores da grama alta de cada bioma: fundo, contorno, folha, brilho. */
+const WILD_GRASS: Partial<Record<Tile, [string, string, string, string]>> = {
+  [Tile.TallGrass]: ["#5aa84a", "#2f7a32", "#3f9440", "#8fd46a"],
+  [Tile.FrostGrass]: ["#dfe9f2", "#5f8fb0", "#9cc8de", "#ffffff"],
+  [Tile.EmberGrass]: ["#6b6264", "#7a3a1a", "#d07a2e", "#f7c56a"],
+  [Tile.GlowGrass]: ["#3f7d72", "#1c5148", "#35a088", "#b6f2dc"],
+  [Tile.SeaGrass]: ["#e9d595", "#1f6b62", "#2f9a8a", "#7fd6c4"],
+};
+
+function tallGrass(c: Ctx, ox: number, oy: number, tx: number, ty: number, withBase = true, kind: Tile = Tile.TallGrass) {
+  const [base, dark, mid, hi] = WILD_GRASS[kind] ?? WILD_GRASS[Tile.TallGrass]!;
+  if (withBase) {
+    if (kind === Tile.TallGrass) px(c, ox, oy, base, TILE, TILE);
+    else {
+      const under = GROUND_UNDER[kind];
+      if (under) under(c, ox, oy, tx, ty);
+      else px(c, ox, oy, base, TILE, TILE);
+    }
+  }
   const tuft = (x: number, y: number) => {
     // moita de 7 px: contorno escuro, folhas, brilho
-    const dark = "#2f7a32";
-    const mid = "#3f9440";
-    const hi = "#8fd46a";
     for (let k = 0; k < 7; k++) px(c, ox + x + k, oy + y + 6, dark);
     px(c, ox + x, oy + y + 2, dark, 1, 4);
     px(c, ox + x + 1, oy + y + 3, mid, 1, 3);
@@ -113,12 +127,75 @@ function tallGrass(c: Ctx, ox: number, oy: number, tx: number, ty: number, withB
   tuft(11, 8 + (hash(tx, ty) < 0.5 ? 0 : 1));
 }
 
+// ---- Chão da expansão do leste ----
+
+function speckled(c: Ctx, ox: number, oy: number, tx: number, ty: number, base: string, dots: string[], n: number) {
+  px(c, ox, oy, base, TILE, TILE);
+  for (let i = 0; i < n; i++) {
+    const x = Math.floor(hash(tx, ty, i + 11) * 15);
+    const y = Math.floor(hash(tx, ty, i + 31) * 15);
+    px(c, ox + x, oy + y, dots[i % dots.length], i % 3 === 0 ? 2 : 1, 1);
+  }
+}
+
+function snow(c: Ctx, ox: number, oy: number, tx: number, ty: number) {
+  speckled(c, ox, oy, tx, ty, "#eef3f8", ["#d3dfeb", "#ffffff", "#dde7f1"], 7);
+}
+
+function ash(c: Ctx, ox: number, oy: number, tx: number, ty: number) {
+  speckled(c, ox, oy, tx, ty, "#6b6264", ["#575052", "#807678", "#5f5759"], 8);
+  if (hash(tx, ty, 7) < 0.12) px(c, ox + 3 + Math.floor(hash(tx, ty, 8) * 10), oy + 3 + Math.floor(hash(tx, ty, 9) * 10), "#e8692f");
+}
+
+function moss(c: Ctx, ox: number, oy: number, tx: number, ty: number) {
+  speckled(c, ox, oy, tx, ty, "#3f7d72", ["#33695f", "#4f9384", "#33695f"], 8);
+  if (hash(tx, ty, 5) < 0.18) px(c, ox + 2 + Math.floor(hash(tx, ty, 6) * 12), oy + 2 + Math.floor(hash(tx, ty, 4) * 12), "#b6f2dc");
+}
+
+function ice(c: Ctx, ox: number, oy: number, tx: number, ty: number) {
+  px(c, ox, oy, "#c9ecf5", TILE, TILE);
+  const x = Math.floor(hash(tx, ty, 2) * 10);
+  const y = Math.floor(hash(tx, ty, 3) * 12);
+  px(c, ox + x, oy + y, "#ffffff", 4, 1);
+  px(c, ox + x + 2, oy + y + 1, "#a9d8e8", 3, 1);
+  const isI = (a: number, b: number) => tileAt(a, b) === Tile.Ice;
+  const rim = "#9cc8de";
+  if (!isI(tx, ty - 1)) px(c, ox, oy, rim, TILE, 1);
+  if (!isI(tx, ty + 1)) px(c, ox, oy + TILE - 1, rim, TILE, 1);
+  if (!isI(tx - 1, ty)) px(c, ox, oy, rim, 1, TILE);
+  if (!isI(tx + 1, ty)) px(c, ox + TILE - 1, oy, rim, 1, TILE);
+}
+
+function lava(c: Ctx, ox: number, oy: number, tx: number, ty: number) {
+  px(c, ox, oy, "#e8462f", TILE, TILE);
+  for (let i = 0; i < 3; i++) {
+    const x = Math.floor(hash(tx, ty, i + 1) * 11);
+    const y = 2 + Math.floor(hash(tx, ty, i + 4) * 11);
+    px(c, ox + x, oy + y, "#f7a23a", 4, 2);
+    px(c, ox + x + 1, oy + y, "#ffe08a", 2, 1);
+  }
+  const isL = (a: number, b: number) => tileAt(a, b) === Tile.Lava;
+  const crust = "#3a2a2a";
+  if (!isL(tx, ty - 1)) px(c, ox, oy, crust, TILE, 2);
+  if (!isL(tx, ty + 1)) px(c, ox, oy + TILE - 2, crust, TILE, 2);
+  if (!isL(tx - 1, ty)) px(c, ox, oy, crust, 2, TILE);
+  if (!isL(tx + 1, ty)) px(c, ox + TILE - 2, oy, crust, 2, TILE);
+}
+
+/** Chão por baixo da grama alta de cada bioma. */
+const GROUND_UNDER: Partial<Record<Tile, (c: Ctx, ox: number, oy: number, tx: number, ty: number) => void>> = {
+  [Tile.FrostGrass]: snow,
+  [Tile.EmberGrass]: ash,
+  [Tile.GlowGrass]: moss,
+  [Tile.SeaGrass]: sand,
+};
+
 /** Moitas da grama alta sem o fundo: desenhadas na frente das pernas de quem está nela. */
-export function grassOverlay(): HTMLCanvasElement {
+export function grassOverlay(kind: Tile = Tile.TallGrass): HTMLCanvasElement {
   const full = document.createElement("canvas");
   full.width = TILE;
   full.height = TILE;
-  tallGrass(full.getContext("2d")!, 0, 0, 0, 0, false);
+  tallGrass(full.getContext("2d")!, 0, 0, 0, 0, false, kind);
   const out = document.createElement("canvas");
   out.width = TILE;
   out.height = 9;
@@ -142,6 +219,17 @@ export function renderGround(): HTMLCanvasElement {
         case Tile.Sand: sand(c, ox, oy, tx, ty); break;
         case Tile.Water: water(c, ox, oy, tx, ty); break;
         case Tile.TallGrass: tallGrass(c, ox, oy, tx, ty); break;
+        case Tile.Snow: snow(c, ox, oy, tx, ty); break;
+        case Tile.Ash: ash(c, ox, oy, tx, ty); break;
+        case Tile.Moss: moss(c, ox, oy, tx, ty); break;
+        case Tile.Ice: ice(c, ox, oy, tx, ty); break;
+        case Tile.Lava: lava(c, ox, oy, tx, ty); break;
+        case Tile.FrostGrass:
+        case Tile.EmberGrass:
+        case Tile.GlowGrass:
+        case Tile.SeaGrass:
+          tallGrass(c, ox, oy, tx, ty, true, tileAt(tx, ty));
+          break;
       }
     }
   }
@@ -177,9 +265,35 @@ const TREE_COLORS = [
   ["#3d8a3c", "#5fae4d", "#2b6b2e"],
   ["#4a9a3a", "#76c254", "#33752a"],
   ["#2f7a4a", "#4ea066", "#225c37"],
+  // 3: Bosque Encantado (copa lilás)
+  ["#6a58b0", "#9a86e0", "#4a3c86"],
 ];
 
+/** Árvore seca e queimada da Encosta Vulcânica. */
+function drawDeadTree() {
+  const [cv, c] = canvas(32, 40);
+  const bark = "#4a3a36";
+  const hi = "#6e5a52";
+  px(c, 13, 14, OUT, 6, 26);
+  px(c, 14, 15, bark, 4, 24);
+  px(c, 14, 15, hi, 1, 24);
+  const branch = (x: number, y: number, dx: number, n: number) => {
+    for (let i = 0; i < n; i++) {
+      px(c, x + i * dx - 1, y - i - 1, OUT, 3, 3);
+    }
+    for (let i = 0; i < n; i++) px(c, x + i * dx, y - i, bark, 1, 1);
+  };
+  branch(13, 22, -1, 7);
+  branch(18, 19, 1, 8);
+  branch(15, 14, -1, 6);
+  branch(17, 12, 1, 5);
+  px(c, 11, 38, OUT, 10, 2);
+  px(c, 6, 15, "#e8692f");
+  return cv;
+}
+
 function drawTree(variant: number) {
+  if (variant === 4) return drawDeadTree();
   const [cv, c] = canvas(32, 40);
   // tronco
   px(c, 12, 26, OUT, 8, 14);
@@ -188,6 +302,14 @@ function drawTree(variant: number) {
   px(c, 11, 38, OUT, 10, 2);
   // copa em 3 cachos
   const [f, l, s] = TREE_COLORS[variant % TREE_COLORS.length];
+  if (variant === 3) {
+    // frutinhas brilhantes do Bosque Encantado
+    blobShape(c, 16, 15, 14, 12, f, l, s);
+    blobShape(c, 10, 11, 7, 6, f, l, s);
+    blobShape(c, 21, 10, 7, 6, f, l, s);
+    for (const [x, y] of [[8, 14], [22, 13], [15, 20], [12, 6], [25, 19]]) px(c, x, y, "#b6f2dc", 2, 2);
+    return cv;
+  }
   blobShape(c, 16, 15, 14, 12, f, l, s);
   blobShape(c, 10, 11, 7, 6, f, l, s);
   blobShape(c, 21, 10, 7, 6, f, l, s);
@@ -199,7 +321,7 @@ function drawTree(variant: number) {
   return cv;
 }
 
-function drawPine() {
+function drawPine(variant = 0) {
   const [cv, c] = canvas(16, 32);
   px(c, 6, 25, OUT, 4, 7);
   px(c, 7, 25, "#7a4a24", 2, 6);
@@ -218,6 +340,55 @@ function drawPine() {
   tier(2, 4, 7);
   tier(8, 6, 8);
   tier(15, 7, 9);
+  if (variant === 1) {
+    // neve no topo de cada camada
+    px(c, 7, 2, "#ffffff", 2, 2);
+    for (const [top, half] of [[8, 3], [15, 4]]) px(c, 8 - half, top, "#f4f8fc", half * 2, 2);
+    px(c, 2, 23, "#e3edf6", 4, 1);
+    px(c, 10, 23, "#e3edf6", 4, 1);
+  }
+  return cv;
+}
+
+/** Coqueiro da Costa dos Recifes. */
+function drawPalm() {
+  const [cv, c] = canvas(24, 40);
+  // tronco curvado
+  for (let y = 12; y < 39; y++) {
+    const x = 11 + Math.round(Math.sin((y - 12) / 9) * 2);
+    px(c, x - 1, y, OUT, 4, 1);
+    px(c, x, y, y % 4 < 2 ? "#a77a4a" : "#8a6038", 2, 1);
+  }
+  px(c, 7, 38, OUT, 10, 2);
+  // folhas
+  const leaf = (dx: number, dy: number) => {
+    for (let i = 0; i < 8; i++) {
+      const x = 12 + Math.round(dx * i);
+      const y = 11 + Math.round(dy * i + (i * i) / 10);
+      px(c, x - 1, y - 1, OUT, 3, 3);
+    }
+    for (let i = 0; i < 8; i++) px(c, 12 + Math.round(dx * i), 11 + Math.round(dy * i + (i * i) / 10), i < 3 ? "#5fae4d" : "#3d8a3c", 1, 1);
+  };
+  leaf(-1.3, -0.6);
+  leaf(1.3, -0.6);
+  leaf(-1.1, 0.1);
+  leaf(1.1, 0.1);
+  leaf(0.2, -1.1);
+  blobShape(c, 12, 12, 2, 2, "#7a4a24", "#94603a", "#5a3418");
+  return cv;
+}
+
+/** Cogumelos que brilham no Bosque Encantado. */
+function drawMushroom() {
+  const [cv, c] = canvas(16, 16);
+  const cap = (x: number, y: number, r: number, col: string, hi: string) => {
+    px(c, x - 1, y + 1, OUT, 3, 5);
+    px(c, x, y + 2, "#f4ead2", 1, 4);
+    blobShape(c, x, y, r, r - 1, col, hi, "#4a3c86");
+    px(c, x - 1, y - 1, "#ffffff");
+  };
+  cap(5, 8, 4, "#8a74d0", "#c3b5f2");
+  cap(11, 10, 3, "#3aa58c", "#b6f2dc");
   return cv;
 }
 
@@ -287,6 +458,13 @@ function drawHouse(variant: number, role?: string) {
 
 function drawRock(variant: number) {
   const [cv, c] = canvas(16, 16);
+  if (variant === 2) {
+    // rocha vulcânica com brasa
+    blobShape(c, 8, 9, 6, 5, "#4a4044", "#6b6264", "#2e282b");
+    px(c, 6, 10, "#e8692f", 2, 1);
+    px(c, 9, 8, "#f7a23a");
+    return cv;
+  }
   blobShape(c, 8, 9, 6 + variant, 5, "#a7a39b", "#cfccc4", "#7f7b74");
   px(c, 5, 7, "#e3e0d8", 2, 1);
   return cv;
@@ -457,6 +635,8 @@ const DRAW: Record<ObjectKind, (variant: number, role?: string) => HTMLCanvasEle
   well: drawWell,
   gym: drawGym,
   npc: drawNpc,
+  palm: drawPalm,
+  mushroom: drawMushroom,
 };
 
 const cache = new Map<string, HTMLCanvasElement>();

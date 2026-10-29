@@ -45,10 +45,48 @@ export const ZONES: Record<string, Zone> = {
     name: "Orla do Bosque",
     table: [w("sprouty", 5, 9, 35), w("shroomy", 5, 9, 25), w("pawly", 5, 8, 20), w("batto", 6, 9, 20, true), w("shado", 7, 10, 6, true)],
   },
+  // ---- Expansão do leste ----
+  gelada: {
+    id: "gelada",
+    name: "Planície Gelada",
+    table: [w("frostitt", 16, 24, 30), w("zephyl", 16, 24, 25), w("zefril", 17, 25, 20), w("spinora", 16, 24, 15), w("aurabit", 18, 26, 10)],
+  },
+  encantado: {
+    id: "encantado",
+    name: "Bosque Encantado",
+    table: [
+      w("mosseroo", 14, 22, 25), w("petallia", 14, 22, 22), w("tangleo", 15, 23, 18), w("verdely", 16, 24, 14),
+      w("luminel", 16, 24, 12), w("bellune", 17, 24, 9), w("shadeleaf", 15, 23, 25, true),
+    ],
+  },
+  vulcao: {
+    id: "vulcao",
+    name: "Encosta Vulcânica",
+    table: [
+      w("ignicub", 12, 20, 28), w("muddle", 12, 20, 22), w("ironclad", 13, 21, 18), w("terravin", 13, 21, 15),
+      w("pyraxis", 15, 22, 12), w("drakosh", 16, 22, 15, true),
+    ],
+  },
+  recife: {
+    id: "recife",
+    name: "Costa dos Recifes",
+    table: [
+      w("bubblit", 12, 20, 28), w("slitheria", 12, 20, 22), w("nimblo", 13, 21, 18), w("marinor", 13, 21, 15),
+      w("voltuga", 14, 22, 10), w("venturi", 15, 22, 10),
+    ],
+  },
 };
+
+/** A expansão do leste começa nesta coluna; a estrada norte-sul dela fica em x 134-135. */
+const EAST = 96;
+const EAST_ROAD = 134;
 
 /** Zona da grama alta numa posição do mapa. */
 export function zoneAt(x: number, y: number): Zone {
+  if (x >= EAST) {
+    if (y < 37) return x < EAST_ROAD ? ZONES.gelada : ZONES.encantado;
+    return x < EAST_ROAD ? ZONES.vulcao : ZONES.recife;
+  }
   if (x < 40 && y >= 40) return ZONES.bosque;
   if (x >= 50 && y >= 40) return ZONES.sul;
   if (x >= 60) return ZONES.leste;
@@ -57,6 +95,8 @@ export function zoneAt(x: number, y: number): Zone {
 
 /** Nome da região para mostrar ao jogador. */
 export function areaName(x: number, y: number): string {
+  if (x >= EAST - 4 && y >= 34 && y <= 39) return "Estrada do Leste";
+  if (x >= EAST) return zoneAt(x, y).name;
   if (y >= 70) return "Distrito dos Ginásios";
   if (x >= 31 && x <= 63 && y >= 23 && y <= 49) return "Vila Broto";
   if (x >= 58 && y <= 24) return "Lago Espelho";

@@ -10,6 +10,10 @@ import {
   CHAT_MAX_LENGTH,
   DIRECTION_DELTA,
   ENCOUNTER_CHANCE,
+  LEGEND_DURATION_MS,
+  LEGEND_FIRST_MS,
+  LEGEND_INTERVAL_MS,
+  LEGEND_LEVEL,
   MAX_PLAYERS_PER_ROOM,
   MOVE_BURST,
   MOVE_COOLDOWN_MS,
@@ -47,7 +51,7 @@ import {
   type PvpSlot,
   type PvpState,
 } from "../../../shared/battle/pvp";
-import { HEAL_POINT, SPAWN, Tile, doorOf, isWalkable, objectAt, tileAt } from "../../../shared/map";
+import { HEAL_POINT, LEGEND_SPOTS, SPAWN, doorOf, isWalkable, isWildTile, objectAt, tileAt } from "../../../shared/map";
 import { rollWild, zoneAt } from "../../../shared/creatures";
 import { getGym, gymStages, type Gym } from "../../../shared/gyms";
 import { TYPE_LABEL } from "../../../shared/battle/types";
@@ -107,6 +111,18 @@ interface Session {
   trade: Trade | null;
   lastSocialAt: number;
   lastLookAt: number;
+  /** a batalha atual é contra o lendário do evento */
+  legendBattle: boolean;
+}
+
+/** Lendário do evento (o estado público fica em state.legend). */
+interface LegendEvent {
+  creature: Creature;
+  region: string;
+  /** sessão que está batalhando com ele */
+  busyBy: string | null;
+  /** o tempo acabou durante uma batalha: some quando ela terminar */
+  expired: boolean;
 }
 
 /** Batalha entre dois jogadores (as sessões nos lugares 0 e 1). */
@@ -232,6 +248,7 @@ export class WorldRoom extends Room<WorldState> {
         this.broadcastSystem(night ? "A noite caiu sobre a Vila Broto." : "Amanheceu na Vila Broto.");
       }
     }, 5000);
+    this.scheduleLegend(LEGEND_FIRST_MS);
     // salvamento periódico das posições
     this.clock.setInterval(() => { for (const s of this.sessions.values()) this.store.markDirty(s.trainer); }, 15000);
 
@@ -339,6 +356,7 @@ export class WorldRoom extends Room<WorldState> {
       trade: null,
       lastSocialAt: 0,
       lastLookAt: 0,
+      legendBattle: false,
     });
     trainer.lastSeen = Date.now();
     this.sendProfile(client);
@@ -347,6 +365,7 @@ export class WorldRoom extends Room<WorldState> {
 
   onLeave(client: Client) {
     this.leaveSocial(client.sessionId);
+    if (this.legend?.busyBy === client.sessionId) this.releaseLegend();
     const s = this.sessions.get(client.sessionId);
     const player = this.state.players.get(client.sessionId);
     if (s && player) {
@@ -454,7 +473,21 @@ export class WorldRoom extends Room<WorldState> {
     s.trainer.y = ny;
     ack();
 
-    if (tileAt(nx, ny) === Tile.TallGrass && this.rng() < ENCOUNTER_CHANCE) {
+    const legend = this.state.legend;
+    if (this.legend && legend.speciesId && legend.x === nx && legend.y === ny) {
+      if (this.legend.busyBy) {
+        const other = this.state.players.get(this.legend.busyBy)?.name ?? "Outro treinador";
+        this.notice(client, `${other} já está enfrentando ${getSpecies(legend.speciesId).name}. Espere a vez!`);
+        return;
+      }
+      this.legend.busyBy = client.sessionId;
+      legend.busy = true;
+      s.legendBattle = true;
+      this.beginWildBattle(client, player, s, this.legend.creature, this.legend.region);
+      return;
+    }
+
+    if (isWildTile(tileAt(nx, ny)) && this.rng() < ENCOUNTER_CHANCE) {
       const zone = zoneAt(nx, ny);
       const { entry, level } = rollWild(zone.table, this.rng, this.state.night);
       this.beginWildBattle(client, player, s, createCreature(entry.speciesId, level), zone.name);
@@ -580,10 +613,93 @@ export class WorldRoom extends Room<WorldState> {
     if (over) {
       s.battle = null;
       player.inBattle = false;
+      if (s.legendBattle) {
+        s.legendBattle = false;
+        const name = getSpecies(battle.foe.speciesId).name;
+        if (battle.result === "caught") {
+          this.broadcastSystem(`✦ ${t.name} capturou o lendário ${name}! ✦`);
+          this.endLegend();
+        } else if (battle.result === "win") {
+          this.broadcastSystem(`${t.name} venceu ${name}, que fugiu ferido. Até a próxima aparição!`);
+          this.endLegend();
+        } else {
+          this.releaseLegend();
+        }
+      }
       this.store.markDirty(t);
       this.sendProfile(client);
       next?.();
     }
+  }
+
+  // ---------- Evento dos lendários ----------
+
+  private legend: LegendEvent | null = null;
+  private legendTimer: Delayed | null = null;
+
+  /** Agenda o próximo lendário. WILDORA_LEGEND_MS (ms) troca o intervalo, para testar. */
+  private scheduleLegend([min, max]: [number, number]) {
+    this.legendTimer?.clear();
+    const env = Number(process.env.WILDORA_LEGEND_MS);
+    const delay = env > 0 ? env : min + Math.floor(this.rng() * (max - min));
+    this.legendTimer = this.clock.setTimeout(() => this.spawnLegend(), delay);
+  }
+
+  /** Coloca um lendário na clareira do bioma dele e avisa no chat. */
+  spawnLegend(speciesId?: string) {
+    if (this.legend) return;
+    const ids = Object.keys(LEGEND_SPOTS);
+    const id = speciesId && LEGEND_SPOTS[speciesId] ? speciesId : ids[Math.floor(this.rng() * ids.length)];
+    const spot = LEGEND_SPOTS[id];
+    const [lo, hi] = LEGEND_LEVEL;
+    const creature = createCreature(id, lo + Math.floor(this.rng() * (hi - lo + 1)));
+    this.legend = { creature, region: spot.region, busyBy: null, expired: false };
+    const st = this.state.legend;
+    st.speciesId = id;
+    st.x = spot.x;
+    st.y = spot.y;
+    st.busy = false;
+    st.endsAt = Date.now() + LEGEND_DURATION_MS;
+    const minutes = Math.round(LEGEND_DURATION_MS / 60000);
+    this.broadcastSystem(
+      `✦ Um lendário apareceu! ${getSpecies(id).name} (Nv. ${creature.level}) foi visto ${spot.at}. Ele some em ${minutes} minutos: o primeiro a chegar enfrenta!`,
+    );
+    this.legendTimer?.clear();
+    this.legendTimer = this.clock.setTimeout(() => {
+      if (!this.legend) return;
+      if (this.legend.busyBy) {
+        this.legend.expired = true;
+        return;
+      }
+      this.broadcastSystem(`${getSpecies(id).name} desapareceu ${spot.at.replace(/^n/, "d")}.`);
+      this.endLegend();
+    }, LEGEND_DURATION_MS);
+  }
+
+  /** Batalha com o lendário acabou sem captura nem vitória: fica livre para o próximo (com o dano que levou). */
+  private releaseLegend() {
+    const ev = this.legend;
+    if (!ev) return;
+    ev.busyBy = null;
+    this.state.legend.busy = false;
+    const c = ev.creature;
+    c.status = null;
+    c.statusTurns = 0;
+    if (c.hp <= 0) c.hp = 1;
+    if (ev.expired) {
+      this.broadcastSystem(`${getSpecies(c.speciesId).name} desapareceu ${LEGEND_SPOTS[c.speciesId].at.replace(/^n/, "d")}.`);
+      this.endLegend();
+    }
+  }
+
+  /** Tira o lendário do mapa e agenda o próximo. */
+  private endLegend() {
+    this.legend = null;
+    const st = this.state.legend;
+    st.speciesId = "";
+    st.busy = false;
+    st.endsAt = 0;
+    this.scheduleLegend(LEGEND_INTERVAL_MS);
   }
 
   // ---------- Ginásios ----------

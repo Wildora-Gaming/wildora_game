@@ -21,7 +21,7 @@ export function spriteSize(speciesId: string): { w: number; h: number } {
 }
 
 /** Canvas no tamanho natural (1 pixel da arte = 1 pixel do canvas). */
-function nativeCanvas(speciesId: string, types: TypeId[]): HTMLCanvasElement {
+export function nativeCanvas(speciesId: string, types: TypeId[]): HTMLCanvasElement {
   const key = speciesId;
   const hit = cache.get(key);
   if (hit) return hit;

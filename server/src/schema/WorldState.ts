@@ -49,8 +49,35 @@ defineTypes(Player, {
   seq: "uint32",
 });
 
+/** Lendário no mapa durante o evento (speciesId vazio = nenhum). */
+export class Legend extends Schema {
+  declare speciesId: string;
+  declare x: number;
+  declare y: number;
+  /** alguém está batalhando com ele agora */
+  declare busy: boolean;
+  /** quando some (ms desde 1970) */
+  declare endsAt: number;
+  constructor() {
+    super();
+    this.speciesId = "";
+    this.x = 0;
+    this.y = 0;
+    this.busy = false;
+    this.endsAt = 0;
+  }
+}
+defineTypes(Legend, {
+  speciesId: "string",
+  x: "uint8",
+  y: "uint8",
+  busy: "boolean",
+  endsAt: "float64",
+});
+
 export class WorldState extends Schema {
   declare players: MapSchema<Player>;
+  declare legend: Legend;
   /** Noite no ciclo dia/noite (afeta encontros e o visual) */
   declare night: boolean;
 
@@ -58,9 +85,11 @@ export class WorldState extends Schema {
     super();
     this.players = new MapSchema<Player>();
     this.night = false;
+    this.legend = new Legend();
   }
 }
 defineTypes(WorldState, {
   players: { map: Player },
   night: "boolean",
+  legend: Legend,
 });
