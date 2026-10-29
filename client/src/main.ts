@@ -171,6 +171,8 @@ function startGame(room: Room) {
     backgroundColor: "#2f6b35",
     pixelArt: true,
     roundPixels: true,
+    render: { antialias: false, powerPreference: "high-performance" },
+    fps: { target: 60, smoothStep: false },
     scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
     scene: [world],
   });

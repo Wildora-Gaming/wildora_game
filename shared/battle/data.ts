@@ -52,6 +52,7 @@ export const MOVES = {
   // Maré
   jato_dagua: move("jato_dagua", "Jato d'Água", "mare", 40, 100),
   onda: move("onda", "Onda", "mare", 70, 100),
+  bolhas: move("bolhas", "Bolhas", "mare", 50, 100, { effect: { status: "assustado", chance: 0.2 } }),
   // Pedra
   rolagem_de_casco: move("rolagem_de_casco", "Rolagem de Casco", "pedra", 50, 90),
   pedregulho: move("pedregulho", "Pedregulho", "pedra", 75, 90),
@@ -114,7 +115,7 @@ const species = (
 // Linhas das iniciais
 const LEAFIN_MOVES: [number, MoveId][] = [[1, "investida"], [1, "chicote_de_rama"], [7, "polen_sonolento"], [12, "mordida_firme"], [18, "folha_navalha"], [34, "golpe_bruto"]];
 const FLAMBO_MOVES: [number, MoveId][] = [[1, "investida"], [1, "fagulha"], [9, "mordida_firme"], [18, "labareda"], [34, "pedregulho"]];
-const AQUARI_MOVES: [number, MoveId][] = [[1, "investida"], [1, "jato_dagua"], [10, "mordida_firme"], [18, "onda"], [34, "golpe_bruto"]];
+const AQUARI_MOVES: [number, MoveId][] = [[1, "investida"], [1, "jato_dagua"], [10, "bolhas"], [18, "onda"], [34, "golpe_bruto"]];
 const ZAPPI_MOVES: [number, MoveId][] = [[1, "investida"], [1, "choque_piscante"], [8, "onda_estatica"], [14, "mordida_firme"], [20, "descarga"]];
 const ROCKY_MOVES: [number, MoveId][] = [[1, "investida"], [3, "rolagem_de_casco"], [12, "mordida_firme"], [20, "pedregulho"]];
 

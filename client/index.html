@@ -45,9 +45,10 @@
       #hud button:hover { filter: brightness(1.07); }
       #hud button.hud-quiet { background: #c9d2e3; }
       #hud .hud-help { margin-left: auto; font-size: 13px; }
-      #night { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: #1b2a66;
-        mix-blend-mode: multiply; opacity: 0; transition: opacity 4s ease; }
-      #night.on { opacity: 0.55; }
+      /* sem mix-blend-mode: no celular ele obriga a recompor a tela inteira a cada quadro */
+      #night { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: #0e1640;
+        opacity: 0; transition: opacity 4s ease; }
+      #night.on { opacity: 0.42; }
       #sound-panel { position: fixed; z-index: 8; width: 220px; display: grid; gap: 8px; padding: 10px 12px;
         background: #f3efe4; color: #1f2430; border: 3px solid #1f2430; border-radius: 10px; box-shadow: 0 4px 0 #0a0d14;
         font-family: var(--pixel); font-size: 15px; }

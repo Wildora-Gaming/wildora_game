@@ -19,8 +19,11 @@ export const WORLD_ZOOM = Math.min(window.innerWidth, window.innerHeight) < 520 
  */
 const STEP_MS = MOVE_COOLDOWN_MS + 6;
 
-/** Toque: segurando o direcional, o segundo passo só vem depois disso (um toque curto = um passo). */
-const TOUCH_REPEAT_MS = 260;
+/**
+ * Toque: o segundo passo só começa se o dedo continuar no direcional depois disso.
+ * Fica logo acima do tempo de um passo: toque curto = um passo, segurar anda sem engasgo.
+ */
+const TOUCH_REPEAT_MS = STEP_MS + 14;
 
 /** Personagem desenhado no mundo, com o movimento de um tile para o outro. */
 interface Mover {

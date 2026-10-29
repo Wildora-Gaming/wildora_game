@@ -57,6 +57,7 @@
 .item-icon { display: inline-block; }
 .item-icon svg { width: 100%; height: 100%; display: block; }
 .stepper { display: flex; align-items: center; gap: 4px; }
+.i-buy { display: flex; align-items: center; gap: 10px; grid-column: 3 / -1; justify-content: flex-end; }
 .stepper .qty { min-width: 22px; text-align: center; font-weight: 700; }
 
 @media (max-width: 560px) {
@@ -64,6 +65,8 @@
   .c-art { width: 64px; height: 64px; }
   .c-actions { grid-column: 1 / -1; grid-auto-flow: column; }
   .i-row { grid-template-columns: 36px 1fr; }
+  .i-buy { grid-column: 1 / -1; justify-content: space-between; }
+  .stepper .pbtn { min-width: 38px; min-height: 36px; font-size: 18px; }
 }
 
 /* Insígnias */

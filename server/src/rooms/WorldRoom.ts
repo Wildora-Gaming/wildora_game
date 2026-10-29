@@ -160,6 +160,27 @@ function newTrainer(id: string, name: string, look: unknown, starterRaw: unknown
   };
 }
 
+/**
+ * Golpes que mudaram de lugar no aprendizado: criaturas antigas trocam pelo golpe novo.
+ * (Aquari aprendia Mordida Firme, igual ao Pawly; agora aprende Bolhas.)
+ */
+const MOVE_SWAPS: { species: string[]; from: string; to: string }[] = [
+  { species: ["aquari", "aquarel", "aquarion"], from: "mordida_firme", to: "bolhas" },
+];
+function migrateMoves(t: Trainer): boolean {
+  let changed = false;
+  for (const c of [...t.team, ...t.box]) {
+    for (const swap of MOVE_SWAPS) {
+      const i = c.moves.indexOf(swap.from);
+      if (!swap.species.includes(c.speciesId) || i < 0) continue;
+      if (c.moves.includes(swap.to)) c.moves.splice(i, 1);
+      else c.moves[i] = swap.to;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function cleanName(raw: unknown): string {
   const base = typeof raw === "string" ? raw : "";
   return base.replace(/[^\p{L}\p{N} _-]/gu, "").replace(/\s+/g, " ").trim().slice(0, NAME_MAX_LENGTH);
@@ -268,6 +289,7 @@ export class WorldRoom extends Room<WorldState> {
   }
 
   onJoin(client: Client, _options: JoinOptions, trainer: Trainer) {
+    if (migrateMoves(trainer)) this.store.markDirty(trainer);
     ONLINE.add(trainer.id);
     LOADED.set(trainer.id, trainer);
     const start = isWalkable(trainer.x, trainer.y) ? trainer : SPAWN;

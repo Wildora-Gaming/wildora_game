@@ -246,7 +246,9 @@ export function openShop(room: Room, msg: ShopMessage) {
         btn("+", () => ((qty[it.id] = Math.min(99, n + 1)), render()), "ghost small"),
       );
       const cost = it.price * n;
-      row.append(itemIcon(it.id, 36), text, stepper, btn(`Comprar (${cost})`, () => room.send("buy", { itemId: it.id, qty: n }), "", cost > money));
+      const buy = el("div", "i-buy");
+      buy.append(stepper, btn(`Comprar (${cost})`, () => room.send("buy", { itemId: it.id, qty: n }), "", cost > money));
+      row.append(itemIcon(it.id, 36), text, buy);
       list.append(row);
     }
     body.append(list);

@@ -281,6 +281,22 @@ async function main() {
   ok("quem sai no meio perde e o outro sai da batalha");
 
   await A.room.leave();
+  await sleep(400);
+
+  // golpe trocado: um Aquari salvo com Mordida Firme volta com Bolhas
+  const saved = store.findByName("Ana")!;
+  const aq = saved.team.find((c) => c.speciesId === "aquari")!;
+  aq.moves = ["investida", "jato_dagua", "mordida_firme"];
+  const back = await new Client(URL).joinOrCreate(ROOM_NAME, { mode: "login", name: "Ana", password: "senha123" });
+  const prof: any[] = [];
+  back.onMessage("profile", (m) => prof.push(m));
+  for (const t of TYPES) if (t !== "profile") back.onMessage(t, () => {});
+  await waitFor(() => prof.length > 0, "perfil");
+  const aqView = prof[0].team.find((c: any) => c.speciesId === "aquari");
+  assert.deepEqual(aqView.moves.map((m: any) => m.id), ["investida", "jato_dagua", "bolhas"]);
+  ok("Aquari antigo troca Mordida Firme por Bolhas ao entrar");
+  await back.leave();
+
   await gameServer.gracefullyShutdown(false);
   console.log(`\n${passed} verificações passaram.`);
   process.exit(0);

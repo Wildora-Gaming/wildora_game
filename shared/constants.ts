@@ -9,7 +9,7 @@ export const TILE_SIZE = 16;
 export const MOVE_COOLDOWN_MS = 160;
 
 /** Passos que podem chegar juntos (variação da rede) sem serem recusados. */
-export const MOVE_BURST = 3;
+export const MOVE_BURST = 8;
 
 /** Chance de encontro a cada passo na grama alta (0–1). */
 export const ENCOUNTER_CHANCE = 0.12;
