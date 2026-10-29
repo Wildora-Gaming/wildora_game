@@ -8,6 +8,7 @@ import { areaName } from "../../../shared/creatures";
 import { grassOverlay, objectArt, objectKey, renderGround } from "../world/art";
 import { ensureAvatar, frameIndex } from "../avatar/sheet";
 import { toast } from "../toast";
+import { sound } from "../audio/audio";
 
 /** Zoom da câmera: cada pixel da arte vira um bloco de N pixels na tela (2 em celular, para ver mais do mapa). */
 export const WORLD_ZOOM = Math.min(window.innerWidth, window.innerHeight) < 520 ? 2 : 3;
@@ -173,7 +174,9 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private arrived(m: Mover) {
-    m.grass.setVisible(tileAt(m.tx, m.ty) === Tile.TallGrass);
+    const grass = tileAt(m.tx, m.ty) === Tile.TallGrass;
+    m.grass.setVisible(grass);
+    if (grass && m === this.me) sound.sfx("grass");
     if (m === this.me) this.updateArea(m.tx, m.ty);
   }
 
@@ -225,6 +228,7 @@ export class WorldScene extends Phaser.Scene {
       this.idle(m, time);
       if (this.bumped !== dir) {
         this.bumped = dir;
+        sound.sfx("bump");
         this.sendMove(dir, m.tx, m.ty);
       }
     }
@@ -301,6 +305,7 @@ export class WorldScene extends Phaser.Scene {
     const clock = document.getElementById("hud-clock");
     $(this.room.state).listen("night", (isNight: boolean) => {
       night?.classList.toggle("on", isNight);
+      sound.setNight(isNight);
       if (clock) clock.textContent = isNight ? "· Noite" : "· Dia";
     });
   }
@@ -353,6 +358,7 @@ export class WorldScene extends Phaser.Scene {
   private updateArea(x: number, y: number) {
     const name = areaName(x, y);
     if (name === this.area) return;
+    sound.setArea(name);
     const first = this.area === "";
     this.area = name;
     const hud = document.getElementById("hud-area");

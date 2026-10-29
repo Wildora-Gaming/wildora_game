@@ -2,6 +2,7 @@
 // Só desenha e anima: todas as regras são resolvidas no servidor.
 import type { Room } from "colyseus.js";
 import "./battle.css";
+import { sound } from "../audio/audio";
 import { creatureArt } from "../creature-art";
 import { itemIcon } from "../items-art";
 import { uiState } from "../ui-state";
@@ -124,6 +125,7 @@ export class BattleUI {
     frame.append(this.field, panel);
     this.root.append(frame);
     this.root.hidden = false;
+    sound.battleStart(this.wild ? "wild" : "trainer");
 
     this.setBusy(true);
     if (this.pvp && this.trainer) {
@@ -333,6 +335,7 @@ export class BattleUI {
 
   private async playEvent(e: BattleEvent) {
     const text = describeEvent(e, this.names, this.wild);
+    this.eventSound(e);
     switch (e.t) {
       case "damage":
       case "tick": {
@@ -407,12 +410,61 @@ export class BattleUI {
     if (text) await this.say(text);
   }
 
+  private eventSound(e: BattleEvent) {
+    switch (e.t) {
+      case "damage":
+        sound.sfx(e.eff > 1 || e.crit ? "super" : e.eff < 1 ? "weak" : "hit");
+        break;
+      case "tick":
+        sound.sfx("weak");
+        break;
+      case "miss":
+        sound.sfx("miss");
+        break;
+      case "status":
+        sound.sfx("status");
+        break;
+      case "faint":
+        sound.sfx("faint");
+        break;
+      case "switch":
+      case "foe_switch":
+        sound.sfx("switch");
+        break;
+      case "throw":
+        sound.sfx("throw");
+        break;
+      case "shake":
+        if (e.count > 0) sound.sfx("shake");
+        break;
+      case "escape":
+        sound.sfx("escape");
+        break;
+      case "run":
+        if (e.ok) sound.sfx("run");
+        break;
+      case "caught":
+        sound.jingle("caught");
+        break;
+      case "level":
+        sound.jingle("level");
+        break;
+      case "evolve":
+        sound.jingle("evolve");
+        break;
+      case "end":
+        if (e.result === "win") sound.jingle("victory");
+        break;
+    }
+  }
+
   private async say(text: string, ms = TEXT_MS) {
     this.message.textContent = text;
     await sleep(ms);
   }
 
   private close() {
+    sound.battleEnd();
     this.root.hidden = true;
     this.root.replaceChildren();
     this.orb = null;

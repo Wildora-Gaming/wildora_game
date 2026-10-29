@@ -75,6 +75,10 @@ com `?toque=1` no endereço.
 - **Troca de criaturas**: cada um oferece uma (do time ou da caixa), vê a oferta do outro com quem
   a capturou, e a troca só acontece quando os dois confirmam. Fica registrado quem capturou.
 - **Jogável no celular**: controles de toque e telas que cabem em retrato e deitado.
+- **Música e efeitos 8-bit originais**, gerados pelo próprio jogo (sem arquivos de áudio): trilhas
+  da vila, das rotas, da noite, de batalha e de ginásio, vinhetas de vitória, cura, captura, subida de
+  nível e evolução, e efeitos de golpe, desmaio, Orbi, grama e menus. Botão **Som** no topo ajusta
+  música e efeitos (fica salvo no navegador).
 - **Centro de Cura**, **Loja** (Orbis e Poções) e **Sementes** ganhas em batalha.
 - **Ciclo dia/noite** (20 min, 6 de noite): à noite aparecem Shado e Batto.
 - Multiplayer em tempo real com chat; quem está em batalha mostra um "!".
@@ -132,6 +136,7 @@ client/
   src/battle/BattleUI.ts   tela de batalha (só anima o que o servidor manda)
   src/panels/              time, caixa, mochila, loja, diálogos, menu de jogador e troca
   src/touch/               controles de toque (celular)
+  src/audio/               música e efeitos sintetizados (trilhas em audio/tracks.ts)
   src/world/art.ts         tileset e objetos em pixel art
   src/avatar/sheet.ts      folha de sprites do personagem para o Phaser
 tools/avatar/              moldes do personagem e prévia

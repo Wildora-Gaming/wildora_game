@@ -3,6 +3,7 @@ import type { Room } from "colyseus.js";
 import { btn, closeModal, creatureRow, el, isModalOpen, openModal, showDialog } from "./panels";
 import { uiState } from "../ui-state";
 import { toast } from "../toast";
+import { sound } from "../audio/audio";
 import {
   SOCIAL_REQUEST_MS,
   type SocialRequestMessage,
@@ -84,7 +85,10 @@ export function setupTrade(room: Room) {
       closeModal();
       ending = false;
     }
-    if (msg.done) showDialog("Troca", msg.text);
+    if (msg.done) {
+      sound.jingle("caught");
+      showDialog("Troca", msg.text);
+    }
     else toast(msg.text, 3000);
   });
 }

@@ -11,6 +11,8 @@ import { setProfile, uiState } from "./ui-state";
 import { toast } from "./toast";
 import { markTouch, setupTouch } from "./touch/touch";
 import { openPlayerMenu, setupTrade, showSocialRequest } from "./panels/social";
+import { sound } from "./audio/audio";
+import { setupSoundPanel } from "./audio/sound-panel";
 import type {
   DialogMessage,
   GymOfferMessage,
@@ -107,12 +109,32 @@ function startGame(room: Room) {
       fn();
     }, 150);
   };
-  room.onMessage("dialog", (msg: DialogMessage) => afterBattle(() => showDialog(msg.title, msg.text)));
-  room.onMessage("shop", (msg: ShopMessage) => openShop(room, msg));
-  room.onMessage("gym_offer", (msg: GymOfferMessage) => openGymOffer(room, msg));
-  room.onMessage("notice", (msg: NoticeMessage) => toast(msg.text));
+  room.onMessage("dialog", (msg: DialogMessage) =>
+    afterBattle(() => {
+      if (msg.title === "Centro de Cura") sound.jingle("heal");
+      else sound.sfx("ping");
+      showDialog(msg.title, msg.text);
+    }),
+  );
+  room.onMessage("shop", (msg: ShopMessage) => {
+    sound.sfx("door");
+    openShop(room, msg);
+  });
+  room.onMessage("gym_offer", (msg: GymOfferMessage) => {
+    sound.sfx("door");
+    openGymOffer(room, msg);
+  });
+  room.onMessage("notice", (msg: NoticeMessage) => {
+    if (/comprou/.test(msg.text)) sound.sfx("buy");
+    toast(msg.text);
+  });
   new BattleUI(room);
-  room.onMessage("social_request", (msg: SocialRequestMessage) => afterBattle(() => showSocialRequest(room, msg)));
+  room.onMessage("social_request", (msg: SocialRequestMessage) =>
+    afterBattle(() => {
+      sound.sfx("ping");
+      showSocialRequest(room, msg);
+    }),
+  );
   setupTrade(room);
 
   loginRoot.remove();
@@ -120,6 +142,14 @@ function startGame(room: Room) {
   document.getElementById("hud")!.style.display = "flex";
   document.getElementById("hud-team-btn")!.addEventListener("click", () => openTeamPanel(room));
   document.getElementById("hud-bag-btn")!.addEventListener("click", () => openBagPanel(room));
+  setupSoundPanel();
+  // clique em botões da interface (não os da batalha, que têm sons próprios nos eventos)
+  document.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement | null)?.closest("button");
+    if (!b || b.disabled || b.id === "hud-sound") return;
+    sound.sfx(/Voltar|Cancelar|Recusar|Fechar|✕/.test(b.textContent ?? "") ? "back" : "click");
+  });
+  sound.setArea("Vila Broto");
   document.getElementById("hud-logout")!.addEventListener("click", async () => {
     await room.leave().catch(() => {});
     await logout();
@@ -145,7 +175,7 @@ function startGame(room: Room) {
     scene: [world],
   });
   // acesso para depuração pelo console do navegador
-  (window as unknown as { wildora: unknown }).wildora = { game, room };
+  (window as unknown as { wildora: unknown }).wildora = { game, room, sound };
 }
 
 function renderHud(p: ProfileMessage) {
