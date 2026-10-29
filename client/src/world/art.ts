@@ -203,38 +203,97 @@ export function grassOverlay(kind: Tile = Tile.TallGrass): HTMLCanvasElement {
   return out;
 }
 
-export function renderGround(): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = MAP_WIDTH * TILE;
-  canvas.height = MAP_HEIGHT * TILE;
-  const c = canvas.getContext("2d")!;
-  for (let ty = 0; ty < MAP_HEIGHT; ty++) {
-    for (let tx = 0; tx < MAP_WIDTH; tx++) {
-      const ox = tx * TILE;
-      const oy = ty * TILE;
-      switch (tileAt(tx, ty)) {
-        case Tile.Grass: grass(c, ox, oy, tx, ty); break;
-        case Tile.Flowers: flowers(c, ox, oy, tx, ty); break;
-        case Tile.Path: path(c, ox, oy, tx, ty); break;
-        case Tile.Sand: sand(c, ox, oy, tx, ty); break;
-        case Tile.Water: water(c, ox, oy, tx, ty); break;
-        case Tile.TallGrass: tallGrass(c, ox, oy, tx, ty); break;
-        case Tile.Snow: snow(c, ox, oy, tx, ty); break;
-        case Tile.Ash: ash(c, ox, oy, tx, ty); break;
-        case Tile.Moss: moss(c, ox, oy, tx, ty); break;
-        case Tile.Ice: ice(c, ox, oy, tx, ty); break;
-        case Tile.Lava: lava(c, ox, oy, tx, ty); break;
-        case Tile.FrostGrass:
-        case Tile.EmberGrass:
-        case Tile.GlowGrass:
-        case Tile.SeaGrass:
-          tallGrass(c, ox, oy, tx, ty, true, tileAt(tx, ty));
-          break;
-      }
+/** Família de chão (para misturar bordas entre biomas); -1 = não mistura. */
+function family(t: Tile): number {
+  switch (t) {
+    case Tile.Grass: case Tile.Flowers: case Tile.TallGrass: return 0;
+    case Tile.Snow: case Tile.FrostGrass: case Tile.Ice: return 1;
+    case Tile.Ash: case Tile.EmberGrass: return 2;
+    case Tile.Moss: case Tile.GlowGrass: return 3;
+    case Tile.Sand: case Tile.SeaGrass: return 4;
+    default: return -1;
+  }
+}
+const FAMILY_SPECK = ["#79c25a", "#eef3f8", "#6b6264", "#3f7d72", "#f0dca0"];
+const FAMILY_SPECK_DARK = ["#5ea84a", "#d3dfeb", "#575052", "#33695f", "#d9c07e"];
+
+/** Borda suave: salpica a cor do chão vizinho (de outro bioma) ao longo do lado que encosta nele. */
+function blendEdges(c: Ctx, tx: number, ty: number, ox: number, oy: number) {
+  const mine = family(tileAt(tx, ty));
+  if (mine < 0) return;
+  const sides: [number, number, number][] = [[0, -1, 0], [0, 1, 1], [-1, 0, 2], [1, 0, 3]];
+  for (const [dx, dy, side] of sides) {
+    const other = family(tileAt(tx + dx, ty + dy));
+    if (other < 0 || other === mine) continue;
+    for (let k = 0; k < 14; k++) {
+      const along = Math.floor(hash(tx, ty, 200 + side * 20 + k) * 16);
+      // mais pontos perto da borda, rareando para dentro
+      const depth = Math.floor(hash(tx, ty, 300 + side * 20 + k) ** 2 * 7);
+      const col = k % 3 === 0 ? FAMILY_SPECK_DARK[other] : FAMILY_SPECK[other];
+      const x = side < 2 ? along : side === 2 ? depth : TILE - 1 - depth;
+      const y = side < 2 ? (side === 0 ? depth : TILE - 1 - depth) : along;
+      px(c, ox + x, oy + y, col, k % 4 === 0 ? 2 : 1, 1);
     }
   }
+}
+
+function drawTile(c: Ctx, tx: number, ty: number, ox: number, oy: number) {
+  drawTileBase(c, tx, ty, ox, oy);
+  blendEdges(c, tx, ty, ox, oy);
+}
+
+function drawTileBase(c: Ctx, tx: number, ty: number, ox: number, oy: number) {
+  switch (tileAt(tx, ty)) {
+    case Tile.Grass: grass(c, ox, oy, tx, ty); break;
+    case Tile.Flowers: flowers(c, ox, oy, tx, ty); break;
+    case Tile.Path: path(c, ox, oy, tx, ty); break;
+    case Tile.Sand: sand(c, ox, oy, tx, ty); break;
+    case Tile.Water: water(c, ox, oy, tx, ty); break;
+    case Tile.TallGrass: tallGrass(c, ox, oy, tx, ty); break;
+    case Tile.Snow: snow(c, ox, oy, tx, ty); break;
+    case Tile.Ash: ash(c, ox, oy, tx, ty); break;
+    case Tile.Moss: moss(c, ox, oy, tx, ty); break;
+    case Tile.Ice: ice(c, ox, oy, tx, ty); break;
+    case Tile.Lava: lava(c, ox, oy, tx, ty); break;
+    case Tile.FrostGrass:
+    case Tile.EmberGrass:
+    case Tile.GlowGrass:
+    case Tile.SeaGrass:
+      tallGrass(c, ox, oy, tx, ty, true, tileAt(tx, ty));
+      break;
+  }
+}
+
+/** Chão de um bloco de n×n tiles a partir de (tx0, ty0). O mundo é desenhado aos pedaços, perto da câmera. */
+export function renderGroundChunk(tx0: number, ty0: number, n: number): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  const w = Math.min(n, MAP_WIDTH - tx0);
+  const h = Math.min(n, MAP_HEIGHT - ty0);
+  canvas.width = w * TILE;
+  canvas.height = h * TILE;
+  const c = canvas.getContext("2d")!;
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) drawTile(c, tx0 + i, ty0 + j, i * TILE, j * TILE);
   return canvas;
 }
+
+/** Cor média de cada tipo de chão (minimapa e mapa grande). */
+export const TILE_COLOR: Record<Tile, string> = {
+  [Tile.Grass]: "#79c25a",
+  [Tile.Path]: "#e3c98f",
+  [Tile.TallGrass]: "#3f9440",
+  [Tile.Water]: "#4aa3df",
+  [Tile.Sand]: "#f0dca0",
+  [Tile.Flowers]: "#8ccc66",
+  [Tile.Snow]: "#eef3f8",
+  [Tile.Ash]: "#6b6264",
+  [Tile.Moss]: "#3f7d72",
+  [Tile.FrostGrass]: "#9cc8de",
+  [Tile.EmberGrass]: "#c4732e",
+  [Tile.GlowGrass]: "#35a088",
+  [Tile.SeaGrass]: "#2f9a8a",
+  [Tile.Lava]: "#e8462f",
+  [Tile.Ice]: "#c9ecf5",
+};
 
 // ---------------- Objetos ----------------
 

@@ -7,9 +7,10 @@ import { nativeCanvas } from "../creature-art";
 import { inputBlocked } from "../ui-state";
 import { openBagPanel, openTeamPanel } from "../panels/panels";
 import { areaName } from "../../../shared/creatures";
-import { grassOverlay, objectArt, objectKey, renderGround } from "../world/art";
+import { grassOverlay, objectArt, objectKey, renderGroundChunk } from "../world/art";
 import { ensureAvatar, frameIndex } from "../avatar/sheet";
 import { toast } from "../toast";
+import { Minimap, openWorldMap, type MapMarkers } from "../world/minimap";
 import { sound } from "../audio/audio";
 
 /** Zoom da câmera: cada pixel da arte vira um bloco de N pixels na tela (2 em celular, para ver mais do mapa). */
@@ -20,6 +21,9 @@ export const WORLD_ZOOM = Math.min(window.innerWidth, window.innerHeight) < 520 
  * esbarrar nele; o servidor ainda aceita pequenas rajadas causadas pela rede.
  */
 const STEP_MS = MOVE_COOLDOWN_MS + 6;
+
+/** Tamanho dos blocos do mundo (tiles). */
+const CHUNK = 32;
 
 /**
  * Toque: o segundo passo só começa se o dedo continuar no direcional depois disso.
@@ -81,6 +85,8 @@ export class WorldScene extends Phaser.Scene {
     this.setupInput();
     this.bindRoom();
     this.setupChat();
+    this.minimap = new Minimap(() => this.markers(), () => this.openMap());
+    this.time.addEvent({ delay: 500, loop: true, callback: () => this.minimap?.draw() });
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE);
@@ -92,6 +98,7 @@ export class WorldScene extends Phaser.Scene {
   private lastFrame = 0;
 
   update(time: number) {
+    this.updateChunks();
     // Tempo real entre quadros: o delta do Phaser é suavizado e fica lento em máquinas fracas.
     const now = performance.now();
     const dt = this.lastFrame ? Math.min(now - this.lastFrame, 250) : 0;
@@ -105,31 +112,72 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------- Mundo ----------
 
-  private drawWorld() {
-    this.textures.addCanvas("ground", renderGround());
-    this.add.image(0, 0, "ground").setOrigin(0).setDepth(-100000);
+  // O mundo é grande: chão e objetos são criados em blocos de CHUNK×CHUNK tiles perto da câmera
+  // e destruídos quando ficam longe (o celular não aguentaria tudo de uma vez).
+  private chunks = new Map<string, Phaser.GameObjects.GameObject[]>();
+  private chunkObjects: (typeof MAP_OBJECTS)[number][][] = [];
 
+  private drawWorld() {
+    const cols = Math.ceil(MAP_WIDTH / CHUNK);
+    const rows = Math.ceil(MAP_HEIGHT / CHUNK);
+    this.chunkObjects = Array.from({ length: cols * rows }, () => []);
     for (const o of MAP_OBJECTS) {
-      if (o.kind === "npc") {
-        this.drawNpc(o);
-        continue;
-      }
-      const key = objectKey(o);
-      if (!this.textures.exists(key)) this.textures.addCanvas(key, objectArt(o));
-      const x = o.x * TILE_SIZE + (o.w * TILE_SIZE) / 2;
-      const y = (o.y + o.h) * TILE_SIZE;
-      this.add.image(x, y, key).setOrigin(0.5, 1).setDepth(y);
+      const cx = Math.floor(o.x / CHUNK);
+      const cy = Math.floor((o.y + o.h - 1) / CHUNK);
+      this.chunkObjects[cy * cols + cx].push(o);
     }
   }
 
+  /** Cria os blocos que a câmera vê (com margem) e apaga os que ficaram longe. */
+  private updateChunks() {
+    const view = this.cameras.main.worldView;
+    const size = CHUNK * TILE_SIZE;
+    const cols = Math.ceil(MAP_WIDTH / CHUNK);
+    const rows = Math.ceil(MAP_HEIGHT / CHUNK);
+    const x0 = Math.max(0, Math.floor((view.x - size / 2) / size));
+    const y0 = Math.max(0, Math.floor((view.y - size / 2) / size));
+    const x1 = Math.min(cols - 1, Math.floor((view.right + size / 2) / size));
+    const y1 = Math.min(rows - 1, Math.floor((view.bottom + size / 2) / size));
+    for (let cy = y0; cy <= y1; cy++)
+      for (let cx = x0; cx <= x1; cx++) if (!this.chunks.has(`${cx},${cy}`)) this.createChunk(cx, cy, cols);
+    for (const [key, list] of this.chunks) {
+      const [cx, cy] = key.split(",").map(Number);
+      if (cx < x0 - 1 || cx > x1 + 1 || cy < y0 - 1 || cy > y1 + 1) {
+        for (const g of list) g.destroy();
+        this.chunks.delete(key);
+        if (this.textures.exists(`chunk-${key}`)) this.textures.remove(`chunk-${key}`);
+      }
+    }
+  }
+
+  private createChunk(cx: number, cy: number, cols: number) {
+    const key = `${cx},${cy}`;
+    const list: Phaser.GameObjects.GameObject[] = [];
+    const tex = `chunk-${key}`;
+    if (!this.textures.exists(tex)) this.textures.addCanvas(tex, renderGroundChunk(cx * CHUNK, cy * CHUNK, CHUNK));
+    list.push(this.add.image(cx * CHUNK * TILE_SIZE, cy * CHUNK * TILE_SIZE, tex).setOrigin(0).setDepth(-100000));
+    for (const o of this.chunkObjects[cy * cols + cx]) {
+      if (o.kind === "npc") {
+        list.push(...this.drawNpc(o));
+        continue;
+      }
+      const k = objectKey(o);
+      if (!this.textures.exists(k)) this.textures.addCanvas(k, objectArt(o));
+      const x = o.x * TILE_SIZE + (o.w * TILE_SIZE) / 2;
+      const y = (o.y + o.h) * TILE_SIZE;
+      list.push(this.add.image(x, y, k).setOrigin(0.5, 1).setDepth(y));
+    }
+    this.chunks.set(key, list);
+  }
+
   /** Líder do ginásio parado ao lado da porta, com o nome em cima. */
-  private drawNpc(o: (typeof MAP_OBJECTS)[number]) {
+  private drawNpc(o: (typeof MAP_OBJECTS)[number]): Phaser.GameObjects.GameObject[] {
     const key = ensureAvatar(this, o.look ?? "");
     const x = px(o.x);
     const y = py(o.y);
-    this.add.ellipse(x, y - 1, 12, 4, 0x000000, 0.22).setDepth(y - 1);
-    this.add.sprite(x, y, key, frameIndex("down", "stand")).setOrigin(0.5, 1).setDepth(y);
-    this.add
+    const shadow = this.add.ellipse(x, y - 1, 12, 4, 0x000000, 0.22).setDepth(y - 1);
+    const sprite = this.add.sprite(x, y, key, frameIndex("down", "stand")).setOrigin(0.5, 1).setDepth(y);
+    const label = this.add
       .text(x, y - 26, o.name ?? "", {
         fontFamily: '"Pixelify Sans", system-ui, sans-serif',
         fontSize: "14px",
@@ -140,6 +188,7 @@ export class WorldScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setScale(1 / WORLD_ZOOM)
       .setDepth(y + 1);
+    return [shadow, sprite, label];
   }
 
   // ---------- Movimento ----------
@@ -184,7 +233,10 @@ export class WorldScene extends Phaser.Scene {
     if (grass) m.grass.setTexture(this.grassKey(tile));
     m.grass.setVisible(grass);
     if (grass && m === this.me) sound.sfx("grass");
-    if (m === this.me) this.updateArea(m.tx, m.ty);
+    if (m === this.me) {
+      this.updateArea(m.tx, m.ty);
+      this.minimap?.draw();
+    }
   }
 
   private idle(m: Mover, time: number) {
@@ -321,6 +373,28 @@ export class WorldScene extends Phaser.Scene {
       sound.setNight(isNight);
       if (clock) clock.textContent = isNight ? "· Noite" : "· Dia";
     });
+  }
+
+  // ---------- Mapa ----------
+
+  private minimap: Minimap | null = null;
+
+  private markers(): MapMarkers {
+    const others: { x: number; y: number }[] = [];
+    for (const m of this.movers.values()) if (m !== this.me) others.push({ x: m.tx, y: m.ty });
+    const l = (this.room.state as any).legend;
+    return {
+      me: this.me ? { x: this.me.tx, y: this.me.ty } : null,
+      others,
+      legend: l?.speciesId ? { speciesId: l.speciesId, x: l.x, y: l.y } : null,
+    };
+  }
+
+  /** Abre o mapa grande (tecla M, botão Mapa ou toque no minimapa). */
+  openMap() {
+    if (inputBlocked()) return;
+    this.held = [];
+    openWorldMap(() => this.markers());
   }
 
   // ---------- Lendário ----------
@@ -576,6 +650,8 @@ export class WorldScene extends Phaser.Scene {
       } else if (k === "b" || k === "i") {
         this.held = [];
         openBagPanel(this.room);
+      } else if (k === "m") {
+        this.openMap();
       }
     });
     window.addEventListener("keyup", (e) => {

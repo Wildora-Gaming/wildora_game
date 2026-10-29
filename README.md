@@ -60,10 +60,12 @@ com `?toque=1` no endereço.
   baixo, 3 chapéus e paletas de cor. Os outros jogadores veem o seu visual.
 - **3 iniciais** (Leafin, Flambo, Aquari) e **89 criaturas** em 43 linhas evolutivas, incluindo
   4 lendários.
-- **Mundo 176×96**: a Vila Broto com 4 zonas de grama alta (Campina Norte, Campos do Leste,
-  Pradaria Sul, Orla do Bosque), Lago Espelho e bosque, e a **Expansão do Leste** pela estrada:
-  Planície Gelada, Bosque Encantado, Encosta Vulcânica e Costa dos Recifes (níveis 12 a 26), cada
-  bioma com chão, grama alta e vegetação próprios, e um Posto de Cura no cruzamento.
+- **Mundo 256×192** com a Vila Broto no centro e 8 biomas grandes, com bordas irregulares que se
+  misturam aos poucos: Campina Norte, Campos do Leste, Pradaria Sul e Orla do Bosque perto da vila
+  (níveis 2 a 10), e mais longe Planície Gelada, Bosque Encantado, Encosta Vulcânica e Costa dos
+  Recifes (níveis 12 a 26). Cada bioma tem chão, grama alta e vegetação próprios; estradas sinuosas
+  ligam a vila aos ginásios. **Minimapa** no canto e **mapa grande** (tecla M, botão Mapa ou toque no
+  minimapa) com regiões, ginásios, Centros de Cura, jogadores e o lendário da vez.
 - **Evento dos lendários**: a cada 2 a 3 horas um lendário (Solvaris, Nocteon, Terralith ou
   Abyssion) aparece na clareira do seu bioma por 15 minutos, com aviso no chat. O primeiro a chegar
   enfrenta (nível 45 a 50, difícil de capturar); quem chega depois espera a vez. Fugir deixa ele
@@ -74,7 +76,8 @@ com `?toque=1` no endereço.
 - **Captura com Orbi** (Orbi, Orbi Prata, Orbi Ouro), chance maior com Vida baixa e estados.
 - **XP dividido** entre quem lutou, subida de nível, golpes novos e **evolução**.
 - **Time de até 6** e caixa ilimitada; ordem do time e líder configuráveis.
-- **8 ginásios** (um de cada tipo) no Distrito dos Ginásios, ao sul da vila: em cada um você
+- **8 ginásios** (um de cada tipo) espalhados pelos biomas, cada um com um Posto de Cura ao lado; os
+  mais fortes ficam mais longe da vila. Em cada um você
   enfrenta 2 treinadores e o líder em sequência, sem curar no meio. Só entram criaturas até 5 níveis
   acima do nível do ginásio. Vencer o líder dá a insígnia
   e itens; treinadores trocam de criatura e escolhem golpes com estratégia.

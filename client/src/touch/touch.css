@@ -64,3 +64,7 @@ html.touch.chat-open .chat-close { display: block; align-self: flex-end; }
   .t-main { width: 64px; height: 64px; font-size: 24px; }
   .t-small { min-width: 80px; padding: 6px 8px; font-size: 13px; }
 }
+
+/* minimapa menor no celular, abaixo da barra de cima, à direita */
+html.touch #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 62px); right: 8px; border-width: 2px; }
+html.touch #minimap canvas { width: 112px; height: 84px; }

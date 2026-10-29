@@ -188,6 +188,7 @@ function startGame(room: Room) {
 
   const world = new WorldScene(room);
   world.onPlayerSelect = (id, name) => openPlayerMenu(room, id, name);
+  document.getElementById("hud-map-btn")!.addEventListener("click", () => world.openMap());
   setupTouch({
     move: (dir) => world.touchMove(dir),
     interact: () => world.interact(),

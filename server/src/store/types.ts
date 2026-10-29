@@ -20,6 +20,20 @@ export interface Trainer {
   badges: string[];
   createdAt: number;
   lastSeen: number;
+  /** versão do mundo em que x/y foram salvos (ver WORLD_VERSION); sem valor = mundo 1 */
+  world?: number;
+}
+
+/**
+ * No Postgres a versão do mundo vai junto da coluna x (x + 1000 × versão), sem mudar o esquema.
+ * Linhas antigas (x < 1000) são do mundo 1.
+ */
+export function encodeX(t: Trainer) {
+  const w = t.world ?? 1;
+  return w >= 2 ? t.x + w * 1000 : t.x;
+}
+export function decodeX(raw: number): { x: number; world: number } {
+  return raw >= 1000 ? { x: raw % 1000, world: Math.floor(raw / 1000) } : { x: raw, world: 1 };
 }
 
 export class NameTakenError extends Error {

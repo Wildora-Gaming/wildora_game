@@ -1,3 +1,4 @@
+import { biomeAt, inVillage, nearLake } from "./map";
 // Criaturas selvagens por zona. Cada campina de grama alta pertence a uma zona.
 
 export interface WildEntry {
@@ -77,30 +78,16 @@ export const ZONES: Record<string, Zone> = {
   },
 };
 
-/** A expansão do leste começa nesta coluna; a estrada norte-sul dela fica em x 134-135. */
-const EAST = 96;
-const EAST_ROAD = 134;
-
-/** Zona da grama alta numa posição do mapa. */
+/** Zona da grama alta numa posição do mapa (o bioma daquele tile). */
 export function zoneAt(x: number, y: number): Zone {
-  if (x >= EAST) {
-    if (y < 37) return x < EAST_ROAD ? ZONES.gelada : ZONES.encantado;
-    return x < EAST_ROAD ? ZONES.vulcao : ZONES.recife;
-  }
-  if (x < 40 && y >= 40) return ZONES.bosque;
-  if (x >= 50 && y >= 40) return ZONES.sul;
-  if (x >= 60) return ZONES.leste;
-  return ZONES.campina;
+  return ZONES[biomeAt(x, y).id] ?? ZONES.campina;
 }
 
 /** Nome da região para mostrar ao jogador. */
 export function areaName(x: number, y: number): string {
-  if (x >= EAST - 4 && y >= 34 && y <= 39) return "Estrada do Leste";
-  if (x >= EAST) return zoneAt(x, y).name;
-  if (y >= 70) return "Distrito dos Ginásios";
-  if (x >= 31 && x <= 63 && y >= 23 && y <= 49) return "Vila Broto";
-  if (x >= 58 && y <= 24) return "Lago Espelho";
-  return zoneAt(x, y).name;
+  if (inVillage(x, y)) return "Vila Broto";
+  if (nearLake(x, y)) return "Lago Espelho";
+  return biomeAt(x, y).name;
 }
 
 export function rollWild(table: WildEntry[], rng: () => number = Math.random, isNight = false) {

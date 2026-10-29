@@ -12,7 +12,7 @@ create table if not exists public.trainers (
   name        text not null check (char_length(name) between 2 and 16),
   name_key    text not null,
   look        text not null,
-  x           integer not null,
+  x           integer not null, -- x + 1000 × versão do mundo (ver server/src/store/types.ts)
   y           integer not null,
   dir         text not null default 'down',
   money       integer not null default 0 check (money >= 0),

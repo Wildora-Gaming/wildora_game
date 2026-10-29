@@ -51,7 +51,7 @@ import {
   type PvpSlot,
   type PvpState,
 } from "../../../shared/battle/pvp";
-import { HEAL_POINT, LEGEND_SPOTS, SPAWN, doorOf, isWalkable, isWildTile, objectAt, tileAt } from "../../../shared/map";
+import { HEAL_POINT, LEGEND_SPOTS, SPAWN, WORLD_VERSION, doorOf, isWalkable, isWildTile, objectAt, tileAt } from "../../../shared/map";
 import { rollWild, zoneAt } from "../../../shared/creatures";
 import { getGym, gymLevelCap, gymStages, type Gym } from "../../../shared/gyms";
 import { tutorOption } from "../../../shared/tutor";
@@ -184,6 +184,7 @@ function newTrainer(id: string, name: string, look: unknown, starterRaw: unknown
     badges: [],
     createdAt: Date.now(),
     lastSeen: Date.now(),
+    world: WORLD_VERSION,
   };
 }
 
@@ -336,6 +337,13 @@ export class WorldRoom extends Room<WorldState> {
 
   onJoin(client: Client, _options: JoinOptions, trainer: Trainer) {
     if (migrateMoves(trainer)) this.store.markDirty(trainer);
+    if ((trainer.world ?? 1) < WORLD_VERSION) {
+      // o mundo mudou desde o último jogo: volta para a Vila Broto
+      trainer.x = SPAWN.x;
+      trainer.y = SPAWN.y;
+      trainer.world = WORLD_VERSION;
+      this.store.markDirty(trainer);
+    }
     ONLINE.add(trainer.id);
     CONNECTED.set(trainer.id, client);
     LOADED.set(trainer.id, trainer);

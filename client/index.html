@@ -45,6 +45,10 @@
       #hud button:hover { filter: brightness(1.07); }
       #hud button.hud-quiet { background: #c9d2e3; }
       #hud .hud-help { margin-left: auto; font-size: 13px; }
+      #minimap { position: fixed; top: 96px; right: 12px; z-index: 4; display: block; cursor: pointer;
+        border: 3px solid #1f2430; border-radius: 8px; overflow: hidden; box-shadow: 0 3px 0 #0a0d14; background: #1f2430; }
+      #minimap canvas { display: block; width: 192px; height: 144px; image-rendering: pixelated; }
+      #minimap[hidden] { display: none !important; }
       /* sem mix-blend-mode: no celular ele obriga a recompor a tela inteira a cada quadro */
       #night { position: fixed; inset: 0; pointer-events: none; z-index: 1; background: #0e1640;
         opacity: 0; transition: opacity 4s ease; }
@@ -71,6 +75,7 @@
       <div class="hud-money" id="hud-money"></div>
       <button type="button" id="hud-team-btn">Time<span class="kbd"> (T)</span></button>
       <button type="button" id="hud-bag-btn">Mochila<span class="kbd"> (B)</span></button>
+      <button type="button" id="hud-map-btn">Mapa<span class="kbd"> (M)</span></button>
       <button type="button" id="hud-look" class="hud-quiet">Visual</button>
       <button type="button" id="hud-sound" class="hud-quiet">Som</button>
       <button type="button" id="hud-logout" class="hud-quiet">Sair</button>

@@ -8,8 +8,10 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { Client } from "colyseus.js";
 import { WorldRoom } from "../src/rooms/WorldRoom";
 import { FileStore } from "../src/store/file-store";
+import { decodeX, encodeX } from "../src/store/types";
 import { ROOM_NAME } from "../../shared/constants";
-import { EAST_X, LEGEND_SPOTS, MAP_HEIGHT, MAP_WIDTH, SPAWN, isWalkable, isWildTile, tileAt, findPath } from "../../shared/map";
+import { BIOMES, WORLD_VERSION, LEGEND_SPOTS, MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH, SPAWN, doorOf, isWalkable, isWildTile, tileAt, findPath } from "../../shared/map";
+import { GYMS } from "../../shared/gyms";
 import { ZONES, areaName, zoneAt } from "../../shared/creatures";
 import { SPECIES } from "../../shared/battle/data";
 
@@ -29,7 +31,7 @@ async function waitFor(cond: () => boolean, label: string, timeout = 3000) {
 }
 
 async function main() {
-  console.log("Expansão do leste e lendários");
+  console.log("Mundo, biomas e lendários");
 
   // ---------- Mapa ----------
   for (const [id, spot] of Object.entries(LEGEND_SPOTS)) {
@@ -39,17 +41,43 @@ async function main() {
     assert.ok(findPath(SPAWN, (x, y) => x === spot.x && y === spot.y), `dá para chegar em ${id}`);
     assert.equal(zoneAt(spot.x, spot.y).name, spot.region);
   }
+  // alcance a partir da vila (uma busca só)
+  const reach = new Uint8Array(MAP_WIDTH * MAP_HEIGHT);
+  const q = [SPAWN.y * MAP_WIDTH + SPAWN.x];
+  reach[q[0]] = 1;
+  for (let i = 0; i < q.length; i++) {
+    const x = q[i] % MAP_WIDTH;
+    const y = (q[i] - x) / MAP_WIDTH;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const n = (y + dy) * MAP_WIDTH + x + dx;
+      if (isWalkable(x + dx, y + dy) && !reach[n]) {
+        reach[n] = 1;
+        q.push(n);
+      }
+    }
+  }
   const counts: Record<string, number> = {};
   for (let y = 0; y < MAP_HEIGHT; y++)
-    for (let x = EAST_X; x < MAP_WIDTH; x++)
-      if (isWildTile(tileAt(x, y)) && isWalkable(x, y)) counts[zoneAt(x, y).id] = (counts[zoneAt(x, y).id] ?? 0) + 1;
-  for (const z of ["gelada", "encantado", "vulcao", "recife"]) {
-    assert.ok((counts[z] ?? 0) > 60, `${z} tem grama alta (${counts[z]})`);
-    for (const e of ZONES[z].table) assert.ok(SPECIES[e.speciesId], `${e.speciesId} existe`);
+    for (let x = 0; x < MAP_WIDTH; x++)
+      if (isWildTile(tileAt(x, y)) && reach[y * MAP_WIDTH + x]) counts[zoneAt(x, y).id] = (counts[zoneAt(x, y).id] ?? 0) + 1;
+  for (const b of BIOMES) {
+    assert.ok((counts[b.id] ?? 0) > 300, `${b.name} tem grama alta alcançável (${counts[b.id]})`);
+    assert.ok(ZONES[b.id], `${b.id} tem tabela de criaturas`);
+    for (const e of ZONES[b.id].table) assert.ok(SPECIES[e.speciesId], `${e.speciesId} existe`);
   }
-  assert.equal(areaName(47, 37), "Vila Broto");
-  assert.equal(areaName(110, 20), "Planície Gelada");
-  ok("quatro biomas novos com grama alta, alcançáveis a partir da vila, e clareiras dos lendários livres");
+  // cada ginásio no seu canto, com Posto de Cura, ambos alcançáveis
+  for (const gym of GYMS) {
+    const g = MAP_OBJECTS.find((o) => o.kind === "gym" && o.gymId === gym.id)!;
+    const d = doorOf(g);
+    assert.ok(reach[(d.y + 1) * MAP_WIDTH + d.x], `porta do ${gym.name} alcançável`);
+    const heal = MAP_OBJECTS.find((o) => o.role === "heal" && Math.abs(o.x - g.x) < 14 && Math.abs(o.y - g.y) < 6)!;
+    assert.ok(heal, `Posto de Cura perto do ${gym.name}`);
+    const hd = doorOf(heal);
+    assert.ok(reach[(hd.y + 1) * MAP_WIDTH + hd.x], `Posto de Cura do ${gym.name} alcançável`);
+  }
+  assert.equal(areaName(SPAWN.x, SPAWN.y), "Vila Broto");
+  assert.equal(areaName(LEGEND_SPOTS.solvaris.x, LEGEND_SPOTS.solvaris.y), "Planície Gelada");
+  ok("oito biomas com grama alta alcançável, oito ginásios com Posto de Cura e clareiras dos lendários livres");
 
   // ---------- Evento ----------
   const store = new FileStore(joinPath(mkdtempSync(joinPath(tmpdir(), "wildora-legend-")), "save.json"), 100);
@@ -124,6 +152,25 @@ async function main() {
   await waitFor(() => legend.speciesId === "", "sumiu do mapa");
   assert.ok(t.team.some((c: any) => c.speciesId === "solvaris") || t.box.some((c: any) => c.speciesId === "solvaris"));
   ok("captura o lendário: vai para o time, todo mundo fica sabendo e ele some do mapa");
+
+  // ---------- Quem foi salvo no mundo antigo volta para a Vila Broto ----------
+  assert.deepEqual(decodeX(encodeX({ x: 200, world: 2 } as any)), { x: 200, world: 2 });
+  assert.deepEqual(decodeX(47), { x: 47, world: 1 });
+  const old = await new Client(`ws://localhost:${PORT}`).joinOrCreate(ROOM_NAME, { mode: "register", name: "Velho", password: "senha123", starter: "flambo" });
+  await sleep(150);
+  await old.leave();
+  await sleep(250);
+  const saved = store.findByName("Velho")!;
+  saved.x = 60;
+  saved.y = 20;
+  delete saved.world;
+  const back = await new Client(`ws://localhost:${PORT}`).joinOrCreate(ROOM_NAME, { mode: "login", name: "Velho", password: "senha123" });
+  await sleep(200);
+  const pv = world.state.players.get(back.sessionId)!;
+  assert.deepEqual([pv.x, pv.y], [SPAWN.x, SPAWN.y]);
+  assert.equal(saved.world, WORLD_VERSION);
+  await back.leave();
+  ok("quem estava no mapa antigo entra na Vila Broto (uma vez só)");
 
   // sem ninguém, o tempo acaba e ele some
   await a.room.leave();

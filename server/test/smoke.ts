@@ -171,7 +171,7 @@ async function main() {
   ok("chat normalizado e limitado");
 
   // ---------- Placa ----------
-  const sign = MAP_OBJECTS.find((o) => o.kind === "sign" && o.x === 46)!;
+  const sign = MAP_OBJECTS.find((o) => o.kind === "sign" && o.text?.startsWith("Vila Broto"))!;
   await walkPath(a, findPath(me(a), (x, y) => x === sign.x && y === sign.y + 1)!);
   a.send("move", { dir: "up" }); // vira para a placa
   await sleep(STEP);

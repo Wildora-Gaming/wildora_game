@@ -3,7 +3,7 @@
 import type { Creature } from "../../../shared/battle/engine";
 import type { StatusId } from "../../../shared/battle/data";
 import type { Db } from "./db";
-import { BatchedStore, NameTakenError, nameKey, type Trainer } from "./types";
+import { BatchedStore, NameTakenError, decodeX, encodeX, nameKey, type Trainer } from "./types";
 
 interface TrainerRow {
   id: string;
@@ -85,7 +85,8 @@ export class PgStore extends BatchedStore {
       id: row.id,
       name: row.name,
       look: row.look,
-      x: row.x,
+      x: decodeX(row.x).x,
+      world: decodeX(row.x).world,
       y: row.y,
       dir: row.dir,
       money: row.money,
@@ -109,7 +110,7 @@ export class PgStore extends BatchedStore {
         await tx.query(
           `insert into public.trainers (id, name, name_key, look, x, y, dir, money, wins, caught, created_at, last_seen)
            values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-          [t.id, t.name, nameKey(t.name), t.look, t.x, t.y, t.dir, t.money, t.stats.wins, t.stats.caught, iso(t.createdAt), iso(t.lastSeen)],
+          [t.id, t.name, nameKey(t.name), t.look, encodeX(t), t.y, t.dir, t.money, t.stats.wins, t.stats.caught, iso(t.createdAt), iso(t.lastSeen)],
         );
         await this.writeDetails(tx, t);
       });
@@ -124,7 +125,7 @@ export class PgStore extends BatchedStore {
       await tx.query(
         `update public.trainers set look=$2, x=$3, y=$4, dir=$5, money=$6, wins=$7, caught=$8, last_seen=$9
          where id=$1`,
-        [t.id, t.look, t.x, t.y, t.dir, t.money, t.stats.wins, t.stats.caught, iso(t.lastSeen)],
+        [t.id, t.look, encodeX(t), t.y, t.dir, t.money, t.stats.wins, t.stats.caught, iso(t.lastSeen)],
       );
       await this.writeDetails(tx, t);
     });
