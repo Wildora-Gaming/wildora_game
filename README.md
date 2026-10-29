@@ -89,8 +89,9 @@ com `?toque=1` no endereço.
   música e efeitos (fica salvo no navegador).
 - **Doce Estelar**: sobe uma criatura 1 nível na hora (com golpes novos e evolução). Na Loja,
   como prêmio de ginásio, sempre ao vencer criatura selvagem de nível 10+ e às vezes nas menores.
-- **Casa do Treinador** (telhado verde, ao sul da praça): troca golpes por outros que a criatura já
-  pode saber pelo nível, inclusive golpes esquecidos. De graça.
+- **Casa do Treinador** (telhado verde, ao sul da praça): troca golpes. Os do repertório da espécie
+  (até o nível atual, inclusive os esquecidos) são de graça; golpes do tipo da criatura e Mordida
+  Firme/Golpe Bruto custam Sementes e pedem nível mínimo pela força do golpe.
 - **Golpe básico próprio de cada criatura** (Patada, Arranhão, Rabada, Mordiscada, Coice...).
 - **Centro de Cura**, **Loja** (Orbis e Poções) e **Sementes** ganhas em batalha.
 - **Ciclo dia/noite** (20 min, 6 de noite): à noite aparecem Shado e Batto.

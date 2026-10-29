@@ -54,6 +54,7 @@ import {
 import { HEAL_POINT, LEGEND_SPOTS, SPAWN, doorOf, isWalkable, isWildTile, objectAt, tileAt } from "../../../shared/map";
 import { rollWild, zoneAt } from "../../../shared/creatures";
 import { getGym, gymStages, type Gym } from "../../../shared/gyms";
+import { tutorOption } from "../../../shared/tutor";
 import { TYPE_LABEL } from "../../../shared/battle/types";
 import { sanitizeLook } from "../../../shared/avatar/look";
 import { STARTERS, STARTER_LEVEL, getMove, getSpecies, isSpeciesId } from "../../../shared/battle/data";
@@ -937,27 +938,43 @@ export class WorldRoom extends Room<WorldState> {
   private handleTutorTeach(client: Client, message: unknown) {
     const r = this.ready(client);
     if (!r || r.s.battle || r.s.duel || r.s.trade) return;
-    if (!this.nearRole(r.player, "tutor")) return;
+    if (!this.nearRole(r.player, "tutor")) {
+      this.notice(client, "Fique na porta da Casa do Treinador para trocar golpes.");
+      return;
+    }
     const m = message as { index?: unknown; moveId?: unknown; replace?: unknown } | null;
     const t = r.s.trainer;
     const index = Number(m?.index);
     if (!Number.isInteger(index) || index < 0 || index >= t.team.length) return;
     const c = t.team[index];
     const moveId = typeof m?.moveId === "string" ? m.moveId : "";
-    const learnable = getSpecies(c.speciesId).learnset.some(([lvl, id]) => id === moveId && lvl <= c.level);
-    if (!learnable || c.moves.includes(moveId)) return;
-    const replace = Number(m?.replace);
+    const opt = tutorOption(c.speciesId, moveId);
+    if (!opt || c.moves.includes(moveId)) return;
     const name = getSpecies(c.speciesId).name;
+    const moveName = getMove(moveId).name;
+    if (c.level < opt.level) {
+      this.notice(client, `${name} precisa estar no nível ${opt.level} para aprender ${moveName}.`);
+      return;
+    }
+    if (t.money < opt.price) {
+      this.notice(client, `${moveName} custa ${opt.price} Sementes. Você tem ${t.money}.`);
+      return;
+    }
+    const replace = Number(m?.replace);
     let text: string;
     if (replace === -1) {
       if (c.moves.length >= MAX_MOVES) return;
       c.moves.push(moveId);
-      text = `${name} aprendeu ${getMove(moveId).name}.`;
+      text = `${name} aprendeu ${moveName}.`;
     } else {
       if (!Number.isInteger(replace) || replace < 0 || replace >= c.moves.length) return;
       const old = c.moves[replace];
       c.moves[replace] = moveId;
-      text = `${name} esqueceu ${getMove(old).name} e aprendeu ${getMove(moveId).name}.`;
+      text = `${name} esqueceu ${getMove(old).name} e aprendeu ${moveName}.`;
+    }
+    if (opt.price) {
+      t.money -= opt.price;
+      text += ` (−${opt.price} Sementes)`;
     }
     this.store.markDirty(t);
     this.sendProfile(client);

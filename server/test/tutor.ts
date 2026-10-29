@@ -123,6 +123,29 @@ async function main() {
   await waitFor(() => flambo.moves[2] === "arranhao", "reaprendeu Arranhão");
   ok("troca um golpe por outro e dá para reaprender golpes esquecidos");
 
+  // golpes do tipo: nível mínimo e preço em Sementes
+  const before = flambo.moves.slice();
+  room.send("tutor_teach", { index: 0, moveId: "chama_ardente", replace: 1 });
+  await waitFor(() => inbox.notice.some((n) => /precisa estar no nível 28 para aprender Chama Ardente/.test(n.text)), "nível mínimo");
+  flambo.level = 32;
+  t.money = 400;
+  room.send("tutor_teach", { index: 0, moveId: "chama_ardente", replace: 1 });
+  await waitFor(() => inbox.notice.some((n) => /Chama Ardente custa 1000 Sementes. Você tem 400/.test(n.text)), "sem Sementes");
+  assert.deepEqual(flambo.moves, before);
+  t.money = 1500;
+  room.send("tutor_teach", { index: 0, moveId: "chama_ardente", replace: 1 });
+  await waitFor(() => flambo.moves[1] === "chama_ardente", "aprendeu golpe do tipo");
+  assert.equal(t.money, 500);
+  room.send("tutor_teach", { index: 0, moveId: "jato_dagua", replace: 0 }); // não é do tipo Brasa
+  room.send("tutor_teach", { index: 0, moveId: "patinha_quente", replace: 0 }); // básico de outra espécie
+  await sleep(250);
+  assert.equal(flambo.moves[0], "labareda");
+  player.x = 5;
+  player.y = 36;
+  room.send("tutor_teach", { index: 0, moveId: "fagulha", replace: 0 });
+  await waitFor(() => inbox.notice.some((n) => /Fique na porta da Casa do Treinador/.test(n.text)), "aviso de distância");
+  ok("golpes do tipo: pedem nível mínimo e Sementes, e explicam quando não dá");
+
   await room.leave();
   await server.gracefullyShutdown(false);
   console.log(`\n${passed} verificações passaram.`);
