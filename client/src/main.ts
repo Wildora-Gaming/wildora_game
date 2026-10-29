@@ -10,7 +10,15 @@ import { openBagPanel, openGymOffer, openShop, openTeamPanel, showDialog } from 
 import { setProfile, uiState } from "./ui-state";
 import { toast } from "./toast";
 import { markTouch, setupTouch } from "./touch/touch";
-import type { DialogMessage, GymOfferMessage, NoticeMessage, ProfileMessage, ShopMessage } from "../../shared/constants";
+import { openPlayerMenu, setupTrade, showSocialRequest } from "./panels/social";
+import type {
+  DialogMessage,
+  GymOfferMessage,
+  NoticeMessage,
+  ProfileMessage,
+  ShopMessage,
+  SocialRequestMessage,
+} from "../../shared/constants";
 
 const loginRoot = document.getElementById("login")!;
 const errorText = (err: unknown) => (err as Error)?.message ?? String(err);
@@ -104,6 +112,8 @@ function startGame(room: Room) {
   room.onMessage("gym_offer", (msg: GymOfferMessage) => openGymOffer(room, msg));
   room.onMessage("notice", (msg: NoticeMessage) => toast(msg.text));
   new BattleUI(room);
+  room.onMessage("social_request", (msg: SocialRequestMessage) => afterBattle(() => showSocialRequest(room, msg)));
+  setupTrade(room);
 
   loginRoot.remove();
   document.getElementById("chat")!.style.display = "flex";
@@ -116,6 +126,7 @@ function startGame(room: Room) {
   });
 
   const world = new WorldScene(room);
+  world.onPlayerSelect = (id, name) => openPlayerMenu(room, id, name);
   setupTouch({
     move: (dir) => world.touchMove(dir),
     interact: () => world.interact(),

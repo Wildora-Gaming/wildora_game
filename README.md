@@ -38,13 +38,19 @@ O passo a passo para colocar no ar (Supabase + Render agora; domínio próprio e
 | Tecla | Ação |
 | --- | --- |
 | Setas / WASD | andar (andar contra algo vira o personagem para ele) |
-| E ou Espaço | interagir: placas, poço, Centro de Cura, Loja |
+| E ou Espaço | interagir: placas, poço, Centro de Cura, Loja; de frente para outro jogador abre batalha/troca |
+| Clique em outro jogador | desafiar para batalha amistosa ou propor troca |
 | T | time e caixa |
 | B | mochila |
 | Enter | chat |
 | Esc | fechar painel / voltar no menu de batalha |
 
 Andar contra a porta do Centro de Cura (telhado vermelho) ou da Loja (telhado azul) já entra.
+
+**No celular** aparecem controles de toque: direcional à esquerda (arrastar o dedo muda a direção;
+toque curto anda um passo), botão **A** para interagir e atalhos de Time, Mochila e Chat. Tocar em
+outro jogador abre o menu de batalha e troca. Para ver os controles de toque no computador, abra
+com `?toque=1` no endereço.
 
 ## O que tem no jogo
 
@@ -63,6 +69,12 @@ Andar contra a porta do Centro de Cura (telhado vermelho) ou da Loja (telhado az
 - **8 ginásios** (um de cada tipo) no Distrito dos Ginásios, ao sul da vila: em cada um você
   enfrenta 2 treinadores e o líder em sequência, sem curar no meio. Vencer o líder dá a insígnia
   e itens; treinadores trocam de criatura e escolhem golpes com estratégia.
+- **Batalha amistosa entre jogadores**: desafie quem estiver perto; os dois escolhem golpe ou troca
+  e o turno resolve com as duas escolhas. As criaturas lutam com Vida cheia e ninguém perde nada.
+  Dá para desistir; quem sai no meio perde; 60 s por turno (sem resposta, escolhe sozinho).
+- **Troca de criaturas**: cada um oferece uma (do time ou da caixa), vê a oferta do outro com quem
+  a capturou, e a troca só acontece quando os dois confirmam. Fica registrado quem capturou.
+- **Jogável no celular**: controles de toque e telas que cabem em retrato e deitado.
 - **Centro de Cura**, **Loja** (Orbis e Poções) e **Sementes** ganhas em batalha.
 - **Ciclo dia/noite** (20 min, 6 de noite): à noite aparecem Shado e Batto.
 - Multiplayer em tempo real com chat; quem está em batalha mostra um "!".
@@ -103,6 +115,7 @@ shared/                    regras compartilhadas (cliente e servidor importam da
   battle/types.ts          8 tipos e tabela de efetividade
   battle/data.ts           golpes e espécies (atributos, golpes por nível, evolução)
   battle/engine.ts         motor de batalha puro: dano, ordem, estados, itens, captura, XP
+  battle/pvp.ts            batalha entre jogadores (mesmas regras, os dois lados escolhem)
   battle/text.ts           frases dos eventos de batalha
 server/
   src/index.ts             sobe o servidor (serve o jogo compilado, /config e /healthz)
@@ -117,7 +130,8 @@ client/
   src/creator/             criação de personagem e escolha do inicial
   src/scenes/WorldScene.ts mundo, jogadores animados, entrada
   src/battle/BattleUI.ts   tela de batalha (só anima o que o servidor manda)
-  src/panels/              time, caixa, mochila, loja e diálogos
+  src/panels/              time, caixa, mochila, loja, diálogos, menu de jogador e troca
+  src/touch/               controles de toque (celular)
   src/world/art.ts         tileset e objetos em pixel art
   src/avatar/sheet.ts      folha de sprites do personagem para o Phaser
 tools/avatar/              moldes do personagem e prévia
@@ -149,7 +163,7 @@ docs/DEPLOY.md             como colocar no ar
 
 ## Próximos passos sugeridos
 
-- Trocas entre jogadores e batalha PvP (sala própria usando o mesmo motor)
+- Ranking de batalhas amistosas e lista de amigos
 - Segundo bioma e mapas feitos no Tiled
 - Sons e música
 - Ranking e perfil público lendo as tabelas do Supabase

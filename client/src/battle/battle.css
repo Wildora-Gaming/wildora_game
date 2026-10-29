@@ -87,6 +87,8 @@
   .battle-actions, .battle-actions.moves, .battle-actions.list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .battle-btn { padding: 12px 6px; min-height: 48px; }
   .info { min-width: 0; width: 54%; padding: 4px 8px 6px; }
+  /* sem espaço para o retrato do treinador (o nome aparece nas falas) */
+  #battle .trainer-portrait { display: none; }
   .info.player { right: 3%; }
   .battle-message { padding: 10px 12px; }
 }

@@ -12,14 +12,14 @@ import { TEAM_MAX, type GymOfferMessage, type ProfileMessage, type ShopMessage }
 import { GYMS } from "../../../shared/gyms";
 import type { CreatureView } from "../../../shared/battle/engine";
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text?: string) {
+export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text?: string) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
 }
 
-function btn(label: string, onClick: () => void, kind = "", disabled = false) {
+export function btn(label: string, onClick: () => void, kind = "", disabled = false) {
   const b = el("button", `pbtn ${kind}`, label);
   b.type = "button";
   b.disabled = disabled;
@@ -40,7 +40,7 @@ export function closeModal() {
   c.onClose?.();
 }
 
-function openModal(kind: string, title: string, body: HTMLElement, opts: { wide?: boolean; onClose?: () => void } = {}) {
+export function openModal(kind: string, title: string, body: HTMLElement, opts: { wide?: boolean; onClose?: () => void } = {}) {
   closeModal();
   const root = el("div", "modal-backdrop");
   const panel = el("section", `modal${opts.wide ? " wide" : ""}`);

@@ -125,6 +125,26 @@ async function main() {
 
   await assert.rejects(() => store.insert({ ...sample, id: USERS["token-ana-0000000000000000"].id, name: "bêto" }), /já está em uso/);
   ok("nome repetido barrado pelo banco (sem acento e sem maiúscula)");
+  // troca: a criatura muda de dono gravando os dois treinadores ao mesmo tempo
+  const otherId = "44444444-4444-4444-8444-444444444444";
+  await pg.query("insert into auth.users (id) values ($1)", [otherId]);
+  const other: Trainer = { ...sample, id: otherId, name: "Carla", team: [createCreature("zappi", 6)], box: [], badges: [], dex: { seen: [], caught: [] }, bag: {} };
+  await store.insert(other);
+  const mine = await store.get(sample.id);
+  const theirs = await store.get(otherId);
+  const give = mine!.team.splice(1, 1)[0];
+  const get = theirs!.team.splice(0, 1)[0];
+  mine!.team.push(get);
+  theirs!.team.push(give);
+  await Promise.all([store.save(theirs!), store.save(mine!)]);
+  const m2 = await store.get(sample.id);
+  const t2 = await store.get(otherId);
+  assert.ok(m2!.team.some((c) => c.uid === get.uid) && !m2!.team.some((c) => c.uid === give.uid));
+  assert.deepEqual(t2!.team.map((c) => c.uid), [give.uid]);
+  assert.equal(t2!.team[0].caughtZone, "Campina Norte");
+  ok("troca no banco: criatura muda de dono e mantém de onde veio");
+  await db.query("delete from public.trainers where id = $1", [otherId]);
+
   await db.query("delete from public.trainers where id = $1", [sample.id]);
 
   // ---------- servidor de login falso ----------

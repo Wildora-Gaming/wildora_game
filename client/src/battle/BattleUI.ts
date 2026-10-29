@@ -39,6 +39,8 @@ export class BattleUI {
   private foe!: CreatureView;
   private bag: Record<string, number> = {};
   private wild = true;
+  /** batalha amistosa contra outro jogador */
+  private pvp = false;
   private trainer: BattleStartMessage["trainer"];
   private foeCount = 1;
   private foeLeft = 1;
@@ -75,7 +77,7 @@ export class BattleUI {
   }
 
   private get names(): BattleNames {
-    return { player: this.player?.name ?? "", foe: this.foe?.name ?? "", trainer: this.trainer?.name };
+    return { player: this.player?.name ?? "", foe: this.foe?.name ?? "", trainer: this.trainer?.name, pvp: this.pvp };
   }
 
   // ---------- Montagem ----------
@@ -87,6 +89,7 @@ export class BattleUI {
     this.active = msg.active;
     this.foe = msg.foe;
     this.wild = msg.wild;
+    this.pvp = Boolean(msg.pvp);
     this.trainer = msg.trainer;
     this.foeCount = msg.foeCount ?? 1;
     this.foeLeft = this.foeCount;
@@ -123,7 +126,10 @@ export class BattleUI {
     this.root.hidden = false;
 
     this.setBusy(true);
-    if (this.trainer) {
+    if (this.pvp && this.trainer) {
+      await this.say(`Batalha amistosa contra ${this.trainer.name}!`);
+      await this.say(`${this.trainer.name} mandou ${msg.foe.name}!`, 900);
+    } else if (this.trainer) {
       await this.say(`${this.trainer.title} ${this.trainer.name} quer batalhar!`);
       await this.say(`${this.trainer.name} mandou ${msg.foe.name}!`, 900);
     } else {
@@ -226,13 +232,15 @@ export class BattleUI {
   private showMainMenu() {
     this.message.textContent = `O que ${this.player.name} vai fazer?`;
     this.actions.className = "battle-actions main";
-    const usable = Object.entries(this.bag).some(([id, n]) => n > 0 && getItem(id));
+    const usable = !this.pvp && Object.entries(this.bag).some(([id, n]) => n > 0 && getItem(id));
     const canSwitch = this.team.some((c, i) => i !== this.active && c.hp > 0);
     this.actions.replaceChildren(
       button("Lutar", "fight", () => this.showMoves()),
       button("Mochila", "bag", () => this.showBag(), !usable),
       button("Criatura", "team", () => this.showTeam(false), !canSwitch),
-      button("Fugir", "run", () => this.act({ kind: "run" }), !this.wild),
+      this.pvp
+        ? button("Desistir", "run", () => this.confirmForfeit())
+        : button("Fugir", "run", () => this.act({ kind: "run" }), !this.wild),
     );
     this.setBusy(false);
   }
@@ -279,9 +287,18 @@ export class BattleUI {
     this.setBusy(false);
   }
 
+  private confirmForfeit() {
+    this.message.textContent = `Desistir da batalha contra ${this.trainer?.name ?? "o adversário"}?`;
+    this.actions.className = "battle-actions main";
+    this.actions.replaceChildren(
+      button("Desistir", "fight", () => this.act({ kind: "run" })),
+      button("Voltar", "back", () => this.showMainMenu()),
+    );
+  }
+
   private act(action: Action) {
     this.setBusy(true);
-    this.message.textContent = "...";
+    this.message.textContent = this.pvp ? `Esperando ${this.trainer?.name ?? "o adversário"} escolher...` : "...";
     this.room.send("battle_action", action);
   }
 
@@ -304,6 +321,9 @@ export class BattleUI {
     if (msg.over) {
       await sleep(500);
       this.close();
+    } else if (msg.waiting) {
+      this.message.textContent = msg.waiting;
+      this.setBusy(true);
     } else if (msg.needSwitch) {
       this.showTeam(true);
     } else {

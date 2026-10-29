@@ -185,7 +185,11 @@ export type BattleEvent =
   | { t: "evolve"; from: string; to: string }
   | { t: "money"; amount: number }
   | { t: "sent"; where: "team" | "box"; name: string }
+  | { t: "pvp_result"; outcome: "win" | "lose" | "draw"; reason: PvpEndReason; opponent: string }
   | { t: "end"; result: BattleResult };
+
+/** Por que uma batalha entre jogadores acabou. */
+export type PvpEndReason = "ko" | "forfeit" | "left" | "timeout";
 
 export function activeOf(state: BattleState): Creature {
   return state.team[state.active];
@@ -273,7 +277,7 @@ export function foesLeft(state: BattleState): number {
   return state.foeTeam.filter((c) => c.hp > 0).length;
 }
 
-function effectiveSpeed(c: Creature): number {
+export function effectiveSpeed(c: Creature): number {
   const spe = calcStats(c).spe;
   return c.status === "paralisado" ? Math.floor(spe / 2) : spe;
 }
@@ -308,7 +312,7 @@ export function catchChance(foe: Creature, orbPower: number): number {
   return Math.min(1, Math.max(0, p));
 }
 
-function applyStatus(target: Creature, status: StatusId, rng: Rng) {
+export function applyStatus(target: Creature, status: StatusId, rng: Rng) {
   target.status = status;
   target.statusTurns = status === "adormecido" ? 1 + Math.floor(rng() * 3) : status === "assustado" ? 2 : 0;
 }

@@ -76,3 +76,15 @@
 .gym-quote { margin: 0; font-size: 18px; line-height: 1.35; }
 .gym-facts { margin: 0; padding-left: 20px; font-family: system-ui, sans-serif; font-size: 14px; display: grid; gap: 4px; }
 .gym-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Entre jogadores */
+.social-text { margin: 0; font-family: system-ui, sans-serif; font-size: 15px; line-height: 1.45; color: #1f2430; }
+.social-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.social-actions .pbtn { min-height: 40px; }
+.trade-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.trade-col { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.trade-col h3 { margin: 0; font-size: 17px; text-transform: uppercase; }
+.trade-pick { max-height: 46vh; overflow-y: auto; padding-right: 2px; }
+.trade-wait { margin: 0; padding: 18px 12px; border: 2px dashed #c9c1ad; border-radius: 10px; text-align: center; color: #5b6272; }
+.trade-status { margin: 0; font-weight: 700; font-size: 16px; }
+@media (max-width: 560px) { .trade-cols { grid-template-columns: minmax(0, 1fr); } .trade-pick { max-height: 32vh; } }

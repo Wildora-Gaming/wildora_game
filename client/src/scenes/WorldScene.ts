@@ -63,6 +63,9 @@ export class WorldScene extends Phaser.Scene {
   private touchAt = 0;
   private touchSteps = -1;
 
+  /** Tocou/clicou em outro jogador, ou apertou A/E de frente para ele. */
+  onPlayerSelect: (sessionId: string, name: string) => void = () => {};
+
   constructor(private room: Room) {
     super("world");
   }
@@ -269,7 +272,7 @@ export class WorldScene extends Phaser.Scene {
 
     $(this.room.state).players.onAdd((player: any, sessionId: string) => {
       const isMe = sessionId === this.room.sessionId;
-      const m = this.createMover(player, isMe);
+      const m = this.createMover(player, isMe, sessionId);
       this.movers.set(sessionId, m);
       if (isMe) {
         this.me = m;
@@ -357,7 +360,7 @@ export class WorldScene extends Phaser.Scene {
     if (!first) toast(name, 1800);
   }
 
-  private createMover(player: any, isMe: boolean): Mover {
+  private createMover(player: any, isMe: boolean, sessionId: string): Mover {
     const textureKey = ensureAvatar(this, player.look || "");
     const dir = (player.dir as Direction) ?? "down";
     const shadow = this.add.ellipse(0, -1, 12, 4, 0x000000, 0.22);
@@ -390,6 +393,15 @@ export class WorldScene extends Phaser.Scene {
 
     // câmera presa no personagem, sem atraso
     if (isMe) this.cameras.main.startFollow(body, true, 1, 1, 0, 12);
+    else {
+      // tocar/clicar em outro jogador abre o menu de batalha e troca (área generosa para o dedo)
+      body.setSize(20, 30);
+      // (a área é contada a partir do canto do tamanho 20×30, centrado nos pés)
+      body.setInteractive(new Phaser.Geom.Rectangle(0, -13, 20, 30), Phaser.Geom.Rectangle.Contains);
+      body.on("pointerup", () => {
+        if (!inputBlocked()) this.onPlayerSelect(sessionId, player.name);
+      });
+    }
     return {
       body,
       sprite,
@@ -429,7 +441,25 @@ export class WorldScene extends Phaser.Scene {
   }
 
   interact() {
-    if (!inputBlocked()) this.room.send("interact");
+    if (inputBlocked()) return;
+    const ahead = this.playerAhead();
+    if (ahead) this.onPlayerSelect(ahead.id, ahead.name);
+    else this.room.send("interact");
+  }
+
+  /** Jogador parado no tile à frente do personagem. */
+  private playerAhead(): { id: string; name: string } | null {
+    const me = this.me;
+    if (!me) return null;
+    const { dx, dy } = DIRECTION_DELTA[me.dir];
+    const x = me.tx + dx;
+    const y = me.ty + dy;
+    for (const [id, m] of this.movers) {
+      if (m === me || m.tx !== x || m.ty !== y) continue;
+      const p = this.room.state.players.get(id);
+      return { id, name: p?.name ?? "" };
+    }
+    return null;
   }
 
   /** Abre o chat (botão de toque). */
@@ -466,7 +496,7 @@ export class WorldScene extends Phaser.Scene {
       if (inputBlocked() || e.repeat) return;
       if (k === "e" || k === " ") {
         e.preventDefault();
-        this.room.send("interact");
+        this.interact();
       } else if (k === "t") {
         this.held = [];
         openTeamPanel(this.room);

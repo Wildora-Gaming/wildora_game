@@ -8,6 +8,8 @@ export interface BattleNames {
   foe: string;
   /** nome do treinador adversário (batalhas de ginásio) */
   trainer?: string;
+  /** batalha contra outro jogador */
+  pvp?: boolean;
 }
 
 export function sideName(side: Side, names: BattleNames, wild = true): string {
@@ -92,7 +94,14 @@ export function describeEvent(e: BattleEvent, names: BattleNames, wild = true): 
       return `O quê? ${getSpecies(e.from).name} evoluiu para ${getSpecies(e.to).name}!`;
     case "money":
       return `Você ganhou ${e.amount} Sementes.`;
+    case "pvp_result":
+      if (e.outcome === "draw") return "Os dois times caíram juntos. Empate!";
+      if (e.outcome === "lose") return e.reason === "timeout" ? `O tempo acabou. ${e.opponent} venceu a batalha.` : `${e.opponent} venceu a batalha.`;
+      if (e.reason === "forfeit") return `${e.opponent} desistiu. Você venceu!`;
+      if (e.reason === "left") return `${e.opponent} saiu do jogo. Você venceu!`;
+      if (e.reason === "timeout") return `${e.opponent} não respondeu a tempo. Você venceu!`;
+      return `Você venceu ${e.opponent}!`;
     case "end":
-      return e.result === "lose" ? "Você correu de volta para o Centro de Cura da Vila Broto." : null;
+      return e.result === "lose" && !names.pvp ? "Você correu de volta para o Centro de Cura da Vila Broto." : null;
   }
 }

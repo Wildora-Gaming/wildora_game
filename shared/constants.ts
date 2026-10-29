@@ -91,6 +91,8 @@ export interface BattleStartMessage {
   active: number;
   foe: CreatureView;
   zone: string;
+  /** batalha contra outro jogador (sem mochila; "Fugir" vira "Desistir") */
+  pvp?: boolean;
 }
 export interface BattleTurnMessage {
   events: BattleEvent[];
@@ -100,6 +102,8 @@ export interface BattleTurnMessage {
   over: boolean;
   needSwitch: boolean;
   bag: Record<string, number>;
+  /** batalha entre jogadores: esperando o outro escolher (texto para mostrar) */
+  waiting?: string;
 }
 export interface DialogMessage {
   title: string;
@@ -122,5 +126,49 @@ export interface GymOfferMessage {
   badges: number;
 }
 export interface NoticeMessage {
+  text: string;
+}
+
+// ---------------- Entre jogadores: batalha amistosa e troca ----------------
+
+/** Distância máxima (em tiles) para desafiar ou propor troca. */
+export const SOCIAL_RANGE = 6;
+/** Tempo para responder a um pedido (ms). */
+export const SOCIAL_REQUEST_MS = 30_000;
+/** Tempo para escolher a ação no turno de uma batalha entre jogadores (ms). */
+export const PVP_TURN_MS = 60_000;
+
+export type SocialKind = "battle" | "trade";
+
+/** cliente → servidor: "social_request" */
+export interface SocialRequest {
+  target: string;
+  kind: SocialKind;
+}
+/** cliente → servidor: "social_answer" */
+export interface SocialAnswer {
+  from: string;
+  accept: boolean;
+}
+/** servidor → cliente: alguém pediu batalha/troca */
+export interface SocialRequestMessage {
+  from: string;
+  name: string;
+  kind: SocialKind;
+}
+
+/** servidor → cliente: como está a troca */
+export interface TradeStateMessage {
+  partner: string;
+  mine: CreatureView | null;
+  theirs: CreatureView | null;
+  /** quem capturou a criatura oferecida pelo outro */
+  theirsCaughtBy: string | null;
+  myOk: boolean;
+  theirOk: boolean;
+}
+/** servidor → cliente: a troca acabou (feita ou cancelada) */
+export interface TradeEndMessage {
+  done: boolean;
   text: string;
 }

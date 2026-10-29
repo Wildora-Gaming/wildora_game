@@ -1,4 +1,4 @@
-import { Room, Client, ServerError } from "@colyseus/core";
+import { Room, Client, ServerError, type Delayed } from "@colyseus/core";
 import { Player, WorldState } from "../schema/WorldState";
 import { randomUUID } from "node:crypto";
 import { NameTakenError, type Store, type Trainer } from "../store/types";
@@ -15,6 +15,9 @@ import {
   MOVE_COOLDOWN_MS,
   NAME_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PVP_TURN_MS,
+  SOCIAL_RANGE,
+  SOCIAL_REQUEST_MS,
   TEAM_MAX,
   isDirection,
   isNightAt,
@@ -26,7 +29,24 @@ import {
   type NoticeMessage,
   type ProfileMessage,
   type ShopMessage,
+  type SocialKind,
+  type SocialRequestMessage,
+  type TradeEndMessage,
+  type TradeStateMessage,
 } from "../../../shared/constants";
+import {
+  autoPvpAction,
+  forSlot,
+  isValidPvpAction,
+  otherSlot,
+  pvpActive,
+  pvpWaitingOn,
+  resolvePvpTurn,
+  startPvp,
+  type PvpAction,
+  type PvpSlot,
+  type PvpState,
+} from "../../../shared/battle/pvp";
 import { HEAL_POINT, SPAWN, Tile, doorOf, isWalkable, objectAt, tileAt } from "../../../shared/map";
 import { rollWild, zoneAt } from "../../../shared/creatures";
 import { getGym, gymStages, type Gym } from "../../../shared/gyms";
@@ -48,6 +68,8 @@ import {
   toView,
   type BattleEvent,
   type BattleState,
+  type Creature,
+  type PvpEndReason,
 } from "../../../shared/battle/engine";
 
 interface JoinOptions {
@@ -74,6 +96,36 @@ interface Session {
   battleZone: string;
   /** desafio de ginásio em andamento: qual treinador está sendo enfrentado */
   gymRun: { gymId: string; stage: number } | null;
+  /** batalha amistosa contra outro jogador */
+  duel: Duel | null;
+  /** troca em andamento */
+  trade: Trade | null;
+  lastSocialAt: number;
+}
+
+/** Batalha entre dois jogadores (as sessões nos lugares 0 e 1). */
+interface Duel {
+  ids: [string, string];
+  state: PvpState;
+  actions: Partial<Record<PvpSlot, PvpAction>>;
+  /** turnos seguidos em que cada um deixou o tempo acabar */
+  missed: [number, number];
+  timer: Delayed | null;
+}
+
+/** Troca entre dois jogadores: cada um oferece uma criatura e os dois confirmam. */
+interface Trade {
+  ids: [string, string];
+  offers: [string | null, string | null];
+  ok: [boolean, boolean];
+}
+
+/** Pedido de batalha/troca esperando resposta. */
+interface SocialPending {
+  from: string;
+  to: string;
+  kind: SocialKind;
+  expires: number;
 }
 
 const PLAYER_COLORS = [0xe4572e, 0x17bebb, 0xffc914, 0x76b041, 0x9b5de5, 0xf15bb5, 0x00bbf9, 0xfee440];
@@ -153,6 +205,11 @@ export class WorldRoom extends Room<WorldState> {
     this.onMessage("box_deposit", (client, m: unknown) => this.handleBox(client, m, "deposit"));
     this.onMessage("box_withdraw", (client, m: unknown) => this.handleBox(client, m, "withdraw"));
     this.onMessage("gym_challenge", (client, m: unknown) => this.handleGymChallenge(client, m));
+    this.onMessage("social_request", (client, m: unknown) => this.handleSocialRequest(client, m));
+    this.onMessage("social_answer", (client, m: unknown) => this.handleSocialAnswer(client, m));
+    this.onMessage("trade_offer", (client, m: unknown) => this.handleTradeOffer(client, m));
+    this.onMessage("trade_confirm", (client) => this.handleTradeConfirm(client));
+    this.onMessage("trade_cancel", (client) => this.endTrade(client.sessionId, "cancel"));
     this.onMessage("*", () => {});
   }
 
@@ -227,6 +284,9 @@ export class WorldRoom extends Room<WorldState> {
       battle: null,
       battleZone: "",
       gymRun: null,
+      duel: null,
+      trade: null,
+      lastSocialAt: 0,
     });
     trainer.lastSeen = Date.now();
     this.sendProfile(client);
@@ -234,6 +294,7 @@ export class WorldRoom extends Room<WorldState> {
   }
 
   onLeave(client: Client) {
+    this.leaveSocial(client.sessionId);
     const s = this.sessions.get(client.sessionId);
     const player = this.state.players.get(client.sessionId);
     if (s && player) {
@@ -310,7 +371,7 @@ export class WorldRoom extends Room<WorldState> {
       if (Number.isInteger(seq) && seq > player.seq && seq < 2 ** 32) player.seq = seq;
     };
 
-    if (s.battle) return ack(); // em batalha não anda
+    if (s.battle || s.duel || s.trade) return ack(); // em batalha ou troca não anda
 
     // O servidor é a autoridade: limita a velocidade média com um balde de passos.
     const now = Date.now();
@@ -370,6 +431,7 @@ export class WorldRoom extends Room<WorldState> {
   }
 
   private handleBattleAction(client: Client, message: unknown) {
+    if (this.sessions.get(client.sessionId)?.duel) return this.handleDuelAction(client, message);
     const r = this.ready(client);
     const battle = r?.s.battle;
     if (!r || !battle || battle.result) return;
@@ -483,7 +545,7 @@ export class WorldRoom extends Room<WorldState> {
 
   private handleGymChallenge(client: Client, message: unknown) {
     const r = this.ready(client);
-    if (!r || r.s.battle) return;
+    if (!r || r.s.battle || r.s.duel || r.s.trade) return;
     const { s, player } = r;
     const gym = getGym((message as { gymId?: unknown } | null)?.gymId);
     if (!gym) return;
@@ -553,7 +615,7 @@ export class WorldRoom extends Room<WorldState> {
 
   private handleInteract(client: Client) {
     const r = this.ready(client);
-    if (!r || r.s.battle) return;
+    if (!r || r.s.battle || r.s.duel || r.s.trade) return;
     const { s, player } = r;
     const now = Date.now();
     if (now - s.lastActionAt < BATTLE_ACTION_COOLDOWN_MS) return;
@@ -661,7 +723,7 @@ export class WorldRoom extends Room<WorldState> {
 
   private handleTeamOrder(client: Client, message: unknown) {
     const r = this.ready(client);
-    if (!r || r.s.battle) return;
+    if (!r || r.s.battle || r.s.duel || r.s.trade) return;
     const m = message as { from?: unknown; to?: unknown } | null;
     const team = r.s.trainer.team;
     const from = Number(m?.from);
@@ -676,7 +738,7 @@ export class WorldRoom extends Room<WorldState> {
 
   private handleBox(client: Client, message: unknown, op: "deposit" | "withdraw") {
     const r = this.ready(client);
-    if (!r || r.s.battle) return;
+    if (!r || r.s.battle || r.s.duel || r.s.trade) return;
     const t = r.s.trainer;
     const index = Number((message as { index?: unknown } | null)?.index);
     if (op === "deposit") {
@@ -690,6 +752,340 @@ export class WorldRoom extends Room<WorldState> {
     }
     this.store.markDirty(t);
     this.sendProfile(client);
+  }
+
+  // ---------- Entre jogadores: pedidos ----------
+
+  private pending: SocialPending[] = [];
+
+  private clientOf(sessionId: string) {
+    return this.clients.find((c) => c.sessionId === sessionId);
+  }
+
+  /** Livre para batalhar/trocar: conectado, fora de batalha, troca ou ginásio. */
+  private isFree(sessionId: string) {
+    const s = this.sessions.get(sessionId);
+    const p = this.state.players.get(sessionId);
+    return !!s && !!p && !s.battle && !s.duel && !s.trade && !p.inBattle;
+  }
+
+  private distance(a: string, b: string) {
+    const pa = this.state.players.get(a);
+    const pb = this.state.players.get(b);
+    if (!pa || !pb) return Infinity;
+    return Math.abs(pa.x - pb.x) + Math.abs(pa.y - pb.y);
+  }
+
+  private handleSocialRequest(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r) return;
+    const m = message as { target?: unknown; kind?: unknown } | null;
+    const target = typeof m?.target === "string" ? m.target : "";
+    const kind = m?.kind === "battle" || m?.kind === "trade" ? m.kind : null;
+    if (!kind || target === client.sessionId) return;
+    const now = Date.now();
+    if (now - r.s.lastSocialAt < 1500) return;
+    r.s.lastSocialAt = now;
+    const other = this.state.players.get(target);
+    const otherClient = this.clientOf(target);
+    if (!other || !otherClient) return this.notice(client, "Esse treinador não está mais aqui.");
+    if (!this.isFree(client.sessionId)) return this.notice(client, "Termine o que está fazendo antes.");
+    if (!this.isFree(target)) return this.notice(client, `${other.name} está ocupado agora.`);
+    if (this.distance(client.sessionId, target) > SOCIAL_RANGE) return this.notice(client, `Chegue mais perto de ${other.name}.`);
+    if (kind === "trade" && r.s.trainer.team.length + r.s.trainer.box.length < 1) return;
+
+    this.pending = this.pending.filter((p) => p.expires > now && !(p.from === client.sessionId && p.to === target));
+    this.pending.push({ from: client.sessionId, to: target, kind, expires: now + SOCIAL_REQUEST_MS });
+    const msg: SocialRequestMessage = { from: client.sessionId, name: r.player.name, kind };
+    otherClient.send("social_request", msg);
+    this.notice(client, kind === "battle" ? `Desafio enviado para ${other.name}.` : `Proposta de troca enviada para ${other.name}.`);
+  }
+
+  private handleSocialAnswer(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r) return;
+    const m = message as { from?: unknown; accept?: unknown } | null;
+    const from = typeof m?.from === "string" ? m.from : "";
+    const now = Date.now();
+    const req = this.pending.find((p) => p.from === from && p.to === client.sessionId && p.expires > now);
+    this.pending = this.pending.filter((p) => p !== req && p.expires > now);
+    const fromClient = this.clientOf(from);
+    const fromPlayer = this.state.players.get(from);
+    if (!req || !fromClient || !fromPlayer) {
+      if (m?.accept === true) this.notice(client, "Esse pedido não vale mais.");
+      return;
+    }
+    const what = req.kind === "battle" ? "batalha" : "troca";
+    if (m?.accept !== true) return this.notice(fromClient, `${r.player.name} recusou a ${what}.`);
+    if (!this.isFree(from) || !this.isFree(client.sessionId)) return this.notice(client, "Um de vocês está ocupado agora.");
+    if (this.distance(from, client.sessionId) > SOCIAL_RANGE + 2) {
+      this.notice(client, `${fromPlayer.name} se afastou.`);
+      return this.notice(fromClient, `${r.player.name} aceitou, mas vocês estão longe demais.`);
+    }
+    if (req.kind === "battle") this.startDuel(from, client.sessionId);
+    else this.startTrade(from, client.sessionId);
+  }
+
+  /** Saiu do jogo: perde a batalha amistosa, cancela troca e pedidos. */
+  private leaveSocial(sessionId: string) {
+    this.pending = this.pending.filter((p) => p.from !== sessionId && p.to !== sessionId);
+    const s = this.sessions.get(sessionId);
+    if (s?.duel) {
+      const d = s.duel;
+      const slot = d.ids.indexOf(sessionId) as PvpSlot;
+      this.finishDuel(d, otherSlot(slot), "left");
+    }
+    if (s?.trade) this.endTrade(sessionId, "left");
+  }
+
+  // ---------- Batalha amistosa ----------
+
+  private startDuel(a: string, b: string) {
+    const sa = this.sessions.get(a)!;
+    const sb = this.sessions.get(b)!;
+    const duel: Duel = {
+      ids: [a, b],
+      state: startPvp(sa.trainer.team, sb.trainer.team),
+      actions: {},
+      missed: [0, 0],
+      timer: null,
+    };
+    sa.duel = duel;
+    sb.duel = duel;
+    for (const slot of [0, 1] as PvpSlot[]) {
+      const me = duel.ids[slot];
+      const opp = duel.ids[otherSlot(slot)];
+      const player = this.state.players.get(me)!;
+      player.inBattle = true;
+      const oppPlayer = this.state.players.get(opp)!;
+      const side = duel.state.sides[slot];
+      const oppSide = duel.state.sides[otherSlot(slot)];
+      const msg: BattleStartMessage = {
+        wild: false,
+        pvp: true,
+        trainer: { name: oppPlayer.name, title: "Treinador", look: oppPlayer.look },
+        foeCount: oppSide.team.length,
+        team: side.team.map((c) => toView(c)),
+        active: side.active,
+        foe: toView(pvpActive(duel.state, otherSlot(slot)), false),
+        zone: "Batalha amistosa",
+      };
+      this.clientOf(me)?.send("battle_start", msg);
+    }
+    this.armDuelTimer(duel);
+  }
+
+  private armDuelTimer(duel: Duel) {
+    duel.timer?.clear();
+    duel.timer = this.clock.setTimeout(() => this.duelTimeout(duel), PVP_TURN_MS);
+  }
+
+  private duelTimeout(duel: Duel) {
+    if (duel.state.result) return;
+    for (const slot of pvpWaitingOn(duel.state)) {
+      if (duel.actions[slot]) {
+        duel.missed[slot] = 0;
+        continue;
+      }
+      duel.missed[slot] += 1;
+      if (duel.missed[slot] >= 2) return this.finishDuel(duel, otherSlot(slot), "timeout");
+      duel.actions[slot] = autoPvpAction(duel.state, slot);
+      const c = this.clientOf(duel.ids[slot]);
+      if (c) this.notice(c, "O tempo acabou: escolhemos por você.");
+    }
+    this.resolveDuel(duel);
+  }
+
+  private handleDuelAction(client: Client, message: unknown) {
+    const s = this.sessions.get(client.sessionId);
+    const duel = s?.duel;
+    if (!s || !duel || duel.state.result) return;
+    const slot = duel.ids.indexOf(client.sessionId) as PvpSlot;
+    // sem intervalo mínimo aqui: cada lado só registra uma ação por turno
+    if ((message as { kind?: unknown } | null)?.kind === "run") return this.finishDuel(duel, otherSlot(slot), "forfeit");
+    if (!isValidPvpAction(duel.state, slot, message) || duel.actions[slot]) return;
+    duel.actions[slot] = message;
+    duel.missed[slot] = 0;
+    if (pvpWaitingOn(duel.state).every((w) => duel.actions[w])) this.resolveDuel(duel);
+  }
+
+  private resolveDuel(duel: Duel) {
+    const events = resolvePvpTurn(duel.state, duel.actions, this.rng);
+    duel.actions = {};
+    if (duel.state.result) {
+      const w = duel.state.result.winner;
+      return this.finishDuel(duel, w, "ko", events);
+    }
+    for (const slot of [0, 1] as PvpSlot[]) this.sendDuelTurn(duel, slot, forSlot(events, slot), false);
+    this.armDuelTimer(duel);
+  }
+
+  private sendDuelTurn(duel: Duel, slot: PvpSlot, events: BattleEvent[], over: boolean) {
+    const side = duel.state.sides[slot];
+    const oppName = this.state.players.get(duel.ids[otherSlot(slot)])?.name ?? "O adversário";
+    const waitingOn = pvpWaitingOn(duel.state);
+    const msg: BattleTurnMessage = {
+      events,
+      team: side.team.map((c) => toView(c)),
+      active: side.active,
+      foe: toView(pvpActive(duel.state, otherSlot(slot)), false),
+      over,
+      needSwitch: !over && side.needSwitch,
+      bag: {},
+      waiting: !over && !waitingOn.includes(slot) ? `Esperando ${oppName} escolher a próxima criatura...` : undefined,
+    };
+    this.clientOf(duel.ids[slot])?.send("battle_turn", msg);
+  }
+
+  /** Fim da batalha amistosa. winner null = empate. Nada muda nos times de verdade. */
+  private finishDuel(duel: Duel, winner: PvpSlot | null, reason: PvpEndReason, events: ReturnType<typeof resolvePvpTurn> = []) {
+    if (duel.timer) duel.timer.clear();
+    duel.timer = null;
+    duel.state.result ??= { winner };
+    const names = duel.ids.map((id) => this.state.players.get(id)?.name ?? "Alguém") as [string, string];
+    for (const slot of [0, 1] as PvpSlot[]) {
+      const id = duel.ids[slot];
+      const s = this.sessions.get(id);
+      if (s) s.duel = null;
+      const player = this.state.players.get(id);
+      if (player) player.inBattle = false;
+      if (reason === "left" && slot !== winner) continue; // quem saiu não recebe nada
+      const outcome = winner === null ? "draw" : winner === slot ? "win" : "lose";
+      const view = forSlot(events, slot);
+      view.push({ t: "pvp_result", outcome, reason, opponent: names[otherSlot(slot)] });
+      view.push({ t: "end", result: outcome === "win" ? "win" : outcome === "lose" ? "lose" : "ran" });
+      this.sendDuelTurn(duel, slot, view, true);
+    }
+    if (winner === null) this.broadcastSystem(`${names[0]} e ${names[1]} empataram numa batalha amistosa.`);
+    else {
+      const how = reason === "forfeit" ? " (desistência)" : reason === "left" ? " (o outro saiu)" : reason === "timeout" ? " (tempo esgotado)" : "";
+      this.broadcastSystem(`${names[winner]} venceu ${names[otherSlot(winner)]} numa batalha amistosa${how}!`);
+    }
+  }
+
+  // ---------- Troca ----------
+
+  private startTrade(a: string, b: string) {
+    const trade: Trade = { ids: [a, b], offers: [null, null], ok: [false, false] };
+    this.sessions.get(a)!.trade = trade;
+    this.sessions.get(b)!.trade = trade;
+    this.sendTradeState(trade);
+  }
+
+  private findCreature(t: Trainer, uid: string | null): Creature | undefined {
+    if (!uid) return undefined;
+    return t.team.find((c) => c.uid === uid) ?? t.box.find((c) => c.uid === uid);
+  }
+
+  private catcherName(c: Creature, owner: Trainer): string | null {
+    if (!c.caughtBy) return null;
+    if (c.caughtBy === owner.id) return owner.name;
+    return LOADED.get(c.caughtBy)?.name ?? null;
+  }
+
+  private sendTradeState(trade: Trade) {
+    for (const slot of [0, 1] as PvpSlot[]) {
+      const me = this.sessions.get(trade.ids[slot]);
+      const them = this.sessions.get(trade.ids[otherSlot(slot)]);
+      if (!me || !them) continue;
+      const mine = this.findCreature(me.trainer, trade.offers[slot]);
+      const theirs = this.findCreature(them.trainer, trade.offers[otherSlot(slot)]);
+      const msg: TradeStateMessage = {
+        partner: them.trainer.name,
+        mine: mine ? toView(mine) : null,
+        theirs: theirs ? toView(theirs) : null,
+        theirsCaughtBy: theirs ? this.catcherName(theirs, them.trainer) : null,
+        myOk: trade.ok[slot],
+        theirOk: trade.ok[otherSlot(slot)],
+      };
+      this.clientOf(trade.ids[slot])?.send("trade_state", msg);
+    }
+  }
+
+  private handleTradeOffer(client: Client, message: unknown) {
+    const s = this.sessions.get(client.sessionId);
+    const trade = s?.trade;
+    if (!s || !trade) return;
+    const raw = (message as { uid?: unknown } | null)?.uid;
+    const uid = typeof raw === "string" ? raw : null;
+    if (uid && !this.findCreature(s.trainer, uid)) return;
+    const slot = trade.ids.indexOf(client.sessionId) as PvpSlot;
+    trade.offers[slot] = uid;
+    // qualquer mudança desfaz as confirmações
+    trade.ok = [false, false];
+    this.sendTradeState(trade);
+  }
+
+  private handleTradeConfirm(client: Client) {
+    const s = this.sessions.get(client.sessionId);
+    const trade = s?.trade;
+    if (!s || !trade || !trade.offers[0] || !trade.offers[1]) return;
+    const slot = trade.ids.indexOf(client.sessionId) as PvpSlot;
+    trade.ok[slot] = true;
+    if (trade.ok[0] && trade.ok[1]) this.executeTrade(trade);
+    else this.sendTradeState(trade);
+  }
+
+  private executeTrade(trade: Trade) {
+    const [sa, sb] = trade.ids.map((id) => this.sessions.get(id));
+    if (!sa || !sb) return;
+    const ca = this.findCreature(sa.trainer, trade.offers[0]);
+    const cb = this.findCreature(sb.trainer, trade.offers[1]);
+    if (!ca || !cb) return this.endTrade(trade.ids[0], "cancel");
+    const take = (t: Trainer, c: Creature) => {
+      t.team = t.team.filter((x) => x !== c);
+      t.box = t.box.filter((x) => x !== c);
+    };
+    const give = (t: Trainer, c: Creature) => {
+      if (t.team.length < TEAM_MAX) t.team.push(c);
+      else t.box.push(c);
+      if (!t.dex.seen.includes(c.speciesId)) t.dex.seen.push(c.speciesId);
+      if (!t.dex.caught.includes(c.speciesId)) t.dex.caught.push(c.speciesId);
+    };
+    take(sa.trainer, ca);
+    take(sb.trainer, cb);
+    give(sa.trainer, cb);
+    give(sb.trainer, ca);
+    // ninguém fica sem time
+    for (const t of [sa.trainer, sb.trainer]) if (!t.team.length && t.box.length) t.team.push(t.box.shift()!);
+    for (const t of [sa.trainer, sb.trainer]) {
+      t.lastSeen = Date.now();
+      void this.store.save(t).catch(() => this.store.markDirty(t));
+    }
+    sa.trade = null;
+    sb.trade = null;
+    const nameA = getSpecies(ca.speciesId).name;
+    const nameB = getSpecies(cb.speciesId).name;
+    const send = (id: string, text: string) => {
+      const c = this.clientOf(id);
+      if (!c) return;
+      const msg: TradeEndMessage = { done: true, text };
+      c.send("trade_end", msg);
+      this.sendProfile(c);
+    };
+    send(trade.ids[0], `Troca feita! ${nameA} foi para ${sb.trainer.name} e você recebeu ${nameB}.`);
+    send(trade.ids[1], `Troca feita! ${nameB} foi para ${sa.trainer.name} e você recebeu ${nameA}.`);
+    this.broadcastSystem(`${sa.trainer.name} e ${sb.trainer.name} trocaram ${nameA} por ${nameB}.`);
+  }
+
+  private endTrade(sessionId: string, why: "cancel" | "left") {
+    const s = this.sessions.get(sessionId);
+    const trade = s?.trade;
+    if (!s || !trade) return;
+    const who = s.trainer.name;
+    for (const id of trade.ids) {
+      const other = this.sessions.get(id);
+      if (other) other.trade = null;
+      if (id === sessionId) continue;
+      const c = this.clientOf(id);
+      const msg: TradeEndMessage = { done: false, text: why === "left" ? `${who} saiu do jogo. Troca cancelada.` : `${who} cancelou a troca.` };
+      c?.send("trade_end", msg);
+    }
+    const self = this.clientOf(sessionId);
+    if (self && why === "cancel") {
+      const msg: TradeEndMessage = { done: false, text: "Troca cancelada." };
+      self.send("trade_end", msg);
+    }
   }
 
   // ---------- Chat ----------
