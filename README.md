@@ -112,9 +112,23 @@ com `?toque=1` no endereço.
 - **Mercador viajante**: muda de lugar a cada 30 minutos (aviso no chat e moeda no mapa) e vende itens
   raros: Orbi Ouro, Hiper Poção e Doce Estelar mais barato.
 - **XP triplicado** em todas as batalhas.
+- **Viagem rápida**: em qualquer Centro ou Posto de Cura, viaje para os que você já visitou, pagando
+  Sementes pela distância.
+- **Livro de Criaturas** (tecla L): as 109 espécies em ordem de número. Capturadas em cores, vistas e
+  não capturadas em cinza, não vistas só a silhueta; detalhes com tipo, evolução, onde encontrar e
+  atributos.
+- **Social** (tecla F): lista de amigos (pedido e aceite clicando no treinador; mostra quem está
+  online e onde) e ranking de insígnias, espécies capturadas, vitórias e lendários.
 - **Ciclo dia/noite** (20 min, 6 de noite): à noite aparecem Shado e Batto.
 - Multiplayer em tempo real com chat; quem está em batalha mostra um "!".
 - Derrota: volta ao Centro de Cura com o time recuperado e perde 10% das Sementes.
+
+## Servidor na Oracle: atualização e backup
+
+- A VM confere a cada 5 minutos se há versão nova. Só reinicia o jogo quando não tem ninguém online;
+  se a versão nova esperar mais de 2 horas, avisa no chat que o servidor reinicia em 5 minutos.
+- Backup diário do banco às 01:17 em `deploy/oracle/backups/` (7 dias). Para restaurar, veja o topo
+  de `deploy/oracle/backup.sh`.
 
 ## Comandos
 

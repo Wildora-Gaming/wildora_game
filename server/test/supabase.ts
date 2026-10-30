@@ -129,7 +129,12 @@ async function main() {
   assert.equal(all[0].creature?.speciesId, "rocky");
   await store.marketDelete("oferta-1");
   assert.equal((await store.marketAll()).length, 0);
-  ok("progresso de missões e ofertas do Mercado vão e voltam do banco");
+  const ranks = await store.ranking();
+  const myRank = ranks.find((row) => row.id === sample.id)!;
+  assert.equal(myRank.badges, 1);
+  assert.equal(myRank.caught, 3);
+  assert.equal(myRank.legends, 0);
+  ok("progresso de missões e ofertas do Mercado vão e voltam do banco; ranking lê das tabelas");
 
   // mudanças: soltar a criatura da caixa, gastar itens, nova insígnia
   back.box = [];

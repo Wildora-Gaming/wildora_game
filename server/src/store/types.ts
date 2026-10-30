@@ -33,6 +33,37 @@ export interface Progress {
   npcTrades?: string[];
   /** treinadores da estrada: dia (desde 1970) da última vitória */
   roadWins?: Record<string, number>;
+  /** Centros/Postos de Cura já visitados (viagem rápida) */
+  visited?: string[];
+  /** amigos (id e nome) */
+  friends?: { id: string; name: string }[];
+}
+
+/** Linha do ranking. */
+export interface RankRow {
+  id: string;
+  name: string;
+  badges: number;
+  /** espécies capturadas (Livro de Criaturas) */
+  caught: number;
+  wins: number;
+  /** espécies lendárias que tem (time ou caixa) */
+  legends: number;
+}
+
+export const LEGEND_IDS = ["solvaris", "nocteon", "abyssion", "terralith"];
+
+/** Ranking a partir dos treinadores na memória (FileStore e jogadores online). */
+export function rankRow(t: Trainer): RankRow {
+  const own = new Set([...t.team, ...t.box].map((c) => c.speciesId));
+  return {
+    id: t.id,
+    name: t.name,
+    badges: t.badges.length,
+    caught: t.dex.caught.length,
+    wins: t.stats.wins,
+    legends: LEGEND_IDS.filter((id) => own.has(id)).length,
+  };
 }
 
 /** Oferta no Mercado entre jogadores. */
@@ -89,6 +120,8 @@ export interface Store {
   /** cria ou atualiza uma oferta */
   marketPut(l: Listing): Promise<void>;
   marketDelete(id: string): Promise<void>;
+  /** todos os treinadores, para o ranking */
+  ranking(): Promise<RankRow[]>;
 }
 
 /** Nome sem acento, minúsculo e com espaços normalizados: impede "Ana" e "aná" ao mesmo tempo. */
@@ -119,6 +152,7 @@ export abstract class BatchedStore implements Store {
   abstract marketAll(): Promise<Listing[]>;
   abstract marketPut(l: Listing): Promise<void>;
   abstract marketDelete(id: string): Promise<void>;
+  abstract ranking(): Promise<RankRow[]>;
 
   markDirty(t: Trainer) {
     this.dirty.set(t.id, t);

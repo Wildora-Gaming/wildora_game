@@ -84,6 +84,9 @@ export interface ProfileMessage {
   team: CreatureView[];
   box: CreatureView[];
   dex: { seen: number; caught: number };
+  /** espécies vistas e capturadas (Livro de Criaturas) */
+  dexSeen: string[];
+  dexCaught: string[];
   badges: string[];
 }
 export interface TrainerInfo {
@@ -151,7 +154,7 @@ export const SOCIAL_REQUEST_MS = 30_000;
 /** Tempo para escolher a ação no turno de uma batalha entre jogadores (ms). */
 export const PVP_TURN_MS = 60_000;
 
-export type SocialKind = "battle" | "trade";
+export type SocialKind = "battle" | "trade" | "friend";
 
 /** cliente → servidor: "social_request" */
 export interface SocialRequest {

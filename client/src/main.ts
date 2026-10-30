@@ -12,6 +12,9 @@ import { toast } from "./toast";
 import { markTouch, setupTouch } from "./touch/touch";
 import { openPlayerMenu, setupTrade, showSocialRequest } from "./panels/social";
 import { openTutor } from "./panels/tutor";
+import { openHealMenu, type HealMenuMessage } from "./panels/travel";
+import { openBook } from "./panels/book";
+import { openSocial, setupFriends } from "./panels/friends";
 import { openMarket, openNpcSwap, type MarketMessage, type NpcSwapMessage } from "./panels/market";
 import { sound } from "./audio/audio";
 import { setupSoundPanel } from "./audio/sound-panel";
@@ -120,6 +123,12 @@ function startGame(room: Room) {
       showDialog(msg.title, msg.text);
     }),
   );
+  room.onMessage("heal_menu", (msg: HealMenuMessage) =>
+    afterBattle(() => {
+      sound.jingle("heal");
+      openHealMenu(room, msg);
+    }),
+  );
   room.onMessage("shop", (msg: ShopMessage) => {
     sound.sfx("door");
     openShop(room, msg);
@@ -150,6 +159,7 @@ function startGame(room: Room) {
     }),
   );
   setupTrade(room);
+  setupFriends(room);
 
   loginRoot.remove();
   document.getElementById("chat")!.style.display = "flex";
@@ -196,12 +206,24 @@ function startGame(room: Room) {
   const world = new WorldScene(room);
   world.onPlayerSelect = (id, name) => openPlayerMenu(room, id, name);
   document.getElementById("hud-map-btn")!.addEventListener("click", () => world.openMap());
+  document.getElementById("hud-social-btn")!.addEventListener("click", () => {
+    if (!uiState.inBattle && !uiState.modalOpen) openSocial(room);
+  });
+  document.getElementById("hud-book-btn")!.addEventListener("click", () => {
+    if (!uiState.inBattle && !uiState.modalOpen) openBook();
+  });
   setupTouch({
     move: (dir) => world.touchMove(dir),
     interact: () => world.interact(),
     team: () => openTeamPanel(room),
     bag: () => openBagPanel(room),
     chat: () => world.openChat(),
+    book: () => {
+      if (!uiState.inBattle && !uiState.modalOpen) openBook();
+    },
+    social: () => {
+      if (!uiState.inBattle && !uiState.modalOpen) openSocial(room);
+    },
   });
 
   const game = new Phaser.Game({

@@ -15,6 +15,7 @@ import { SPECIES } from "../../shared/battle/data";
 import { createCreature } from "../../shared/battle/engine";
 import { creatureSellPrice, itemSellPrice, MERCHANT_STOCK } from "../../shared/economy";
 import { getItem } from "../../shared/items";
+import { TRAVEL_POINTS, getTravelPoint, travelCost } from "../../shared/travel";
 
 const PORT = 2605;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -61,7 +62,7 @@ async function main() {
 
   const join = async (name: string, mode = "register") => {
     const room = await new Client(`ws://localhost:${PORT}`).joinOrCreate(ROOM_NAME, { mode, name, password: "senha123", starter: "leafin" });
-    const inbox: Record<string, any[]> = { profile: [], notice: [], dialog: [], market: [], shop: [], npc_swap: [], battle_start: [], battle_turn: [], chat: [] };
+    const inbox: Record<string, any[]> = { profile: [], notice: [], dialog: [], market: [], shop: [], npc_swap: [], battle_start: [], battle_turn: [], chat: [], heal_menu: [], social_request: [], friends: [], ranking: [] };
     for (const t of Object.keys(inbox)) room.onMessage(t, (m) => inbox[t].push(m));
     for (const t of ["npc_swap_done", "gym_offer", "tutor_open"]) room.onMessage(t, () => {});
     await waitFor(() => inbox.profile.length > 0, "perfil");
@@ -252,6 +253,60 @@ async function main() {
   assert.ok(mc.x !== was.x || mc.y !== was.y, "mudou de lugar");
   await waitFor(() => b.inbox.chat.some((m) => m.system && /mercador viajante, montou a barraca/.test(m.text)), "aviso no chat");
   ok("Mercador viajante vende itens raros de perto e muda de lugar com aviso no chat");
+
+  // ---------- viagem rápida ----------
+  const vila = getTravelPoint("vila")!;
+  const fera = getTravelPoint("posto_fera")!;
+  assert.ok(vila && fera && TRAVEL_POINTS.length === 9, "Vila + 8 Postos");
+  const healAt = (pt: { x: number; y: number }) => put(a2, pt.x, pt.y, "up");
+  healAt(vila);
+  await sleep(450);
+  a2.room.send("interact");
+  await waitFor(() => a2.inbox.heal_menu.length === 1, "menu do Centro de Cura");
+  assert.equal(a2.inbox.heal_menu[0].points.find((p: any) => p.id === "posto_fera").visited, false);
+  t2.money = 5000;
+  a2.room.send("travel", { to: "posto_fera" });
+  await waitFor(() => a2.inbox.notice.some((n) => /ainda não conhece esse lugar/.test(n.text)), "destino não visitado");
+  // passa perto do Posto do Ginásio Garra: vira destino
+  put(a2, fera.x - 2, fera.y);
+  a2.room.send("move", { dir: "right", seq: 950 });
+  await waitFor(() => t2.progress.visited?.includes("posto_fera"), "visitou o Posto");
+  await waitFor(() => a2.inbox.notice.some((n) => /Novo destino de viagem rápida: Ginásio Garra/.test(n.text)), "aviso de destino");
+  healAt(vila);
+  const cost = travelCost(vila, fera);
+  a2.room.send("travel", { to: "posto_fera" });
+  await waitFor(() => world.state.players.get(a2.room.sessionId)!.x === fera.x, "viajou");
+  assert.equal(world.state.players.get(a2.room.sessionId)!.y, fera.y);
+  assert.equal(t2.money, 5000 - cost);
+  ok(`viagem rápida: só para Postos visitados, sai de um Centro de Cura e cobra pela distância (${cost} Sementes até o Garra)`);
+
+  // ---------- amigos e ranking ----------
+  const pb2 = world.state.players.get(b.room.sessionId)!;
+  pb2.x = SPAWN.x;
+  pb2.y = SPAWN.y;
+  await sleep(1600);
+  a2.room.send("social_request", { target: b.room.sessionId, kind: "friend" });
+  await waitFor(() => b.inbox.social_request.some((m) => m.kind === "friend" && m.name === "Vera"), "pedido de amizade");
+  b.room.send("social_answer", { from: a2.room.sessionId, accept: true });
+  await waitFor(() => (t2.progress.friends ?? []).some((f: any) => f.name === "Otto"), "amizade de Vera");
+  assert.ok(tb.progress.friends.some((f: any) => f.name === "Vera"), "amizade de Otto");
+  a2.room.send("friends_open");
+  await waitFor(() => a2.inbox.friends.length > 0, "lista de amigos");
+  const fr = a2.inbox.friends.at(-1).friends;
+  assert.equal(fr.length, 1);
+  assert.equal(fr[0].online, true);
+  assert.ok(fr[0].area, "mostra onde está");
+  t2.badges = ["fera", "flora"];
+  a2.room.send("ranking_open");
+  await waitFor(() => a2.inbox.ranking.length > 0, "ranking");
+  const rows = a2.inbox.ranking[0].rows;
+  assert.ok(rows.length >= 2);
+  assert.equal(rows.find((r: any) => r.name === "Vera").badges, 2);
+  assert.ok(rows.find((r: any) => r.name === "Vera").caught >= 1);
+  a2.room.send("friend_remove", { id: tb.id });
+  await waitFor(() => (t2.progress.friends ?? []).length === 0, "removeu");
+  assert.equal(tb.progress.friends.length, 0, "saiu dos dois lados");
+  ok("amizade com pedido e aceite, lista mostra online e onde está; ranking com todos; remover tira dos dois");
 
   await a2.room.leave();
   await b.room.leave();

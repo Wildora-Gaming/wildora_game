@@ -10,6 +10,8 @@ export interface TouchHandlers {
   team(): void;
   bag(): void;
   chat(): void;
+  book(): void;
+  social(): void;
 }
 
 export function isTouchDevice(): boolean {
@@ -49,6 +51,8 @@ export function setupTouch(h: TouchHandlers) {
       <span class="dpad-knob"></span>
     </div>
     <div class="touch-actions">
+      <button type="button" class="t-btn t-small" data-act="book">Livro</button>
+      <button type="button" class="t-btn t-small" data-act="social">Social</button>
       <button type="button" class="t-btn t-small" data-act="chat">Chat</button>
       <button type="button" class="t-btn t-small" data-act="bag">Mochila</button>
       <button type="button" class="t-btn t-small" data-act="team">Time</button>

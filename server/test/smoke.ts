@@ -77,7 +77,7 @@ function ok(label: string) {
 async function join(options: Record<string, unknown>) {
   const inbox: Record<string, any[]> = {};
   const room = await new Client(URL).joinOrCreate(ROOM_NAME, options);
-  for (const type of ["profile", "battle_start", "battle_turn", "chat", "dialog", "shop", "notice"]) {
+  for (const type of ["profile", "battle_start", "battle_turn", "chat", "dialog", "shop", "notice", "heal_menu"]) {
     inbox[type] = [];
     room.onMessage(type, (m) => inbox[type].push(m));
   }
@@ -268,10 +268,11 @@ async function main() {
   await walkPath(a, findPath(me(a), (x, y) => x === healDoor.x && y === healDoor.y + 1)!);
   a.send("move", { dir: "up" });
   await sleep(STEP);
-  const nd = ia.dialog.length;
+  const nh = ia.heal_menu.length;
   a.send("interact");
-  await waitFor(() => ia.dialog.length > nd, "cura");
-  assert.match(ia.dialog.at(-1).title, /Centro de Cura/);
+  await waitFor(() => ia.heal_menu.length > nh, "cura");
+  assert.equal(ia.heal_menu.at(-1).title, "Centro de Cura");
+  assert.equal(ia.heal_menu.at(-1).points.length, 8, "viagem rápida para os 8 Postos");
   await waitFor(() => ia.profile.at(-1).team.every((c: any) => c.hp === c.maxHp), "time curado");
   ok("Centro de Cura recupera o time");
 

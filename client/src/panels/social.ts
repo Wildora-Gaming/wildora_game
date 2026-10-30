@@ -27,6 +27,10 @@ export function openPlayerMenu(room: Room, sessionId: string, name: string) {
       room.send("social_request", { target: sessionId, kind: "trade" });
       closeModal();
     }, "ghost"),
+    btn("Adicionar amigo", () => {
+      room.send("social_request", { target: sessionId, kind: "friend" });
+      closeModal();
+    }, "ghost"),
   );
   body.append(actions);
   openModal("player", `Treinador ${name}`, body);
@@ -48,7 +52,9 @@ export function showSocialRequest(room: Room, msg: SocialRequestMessage) {
       "social-text",
       msg.kind === "battle"
         ? `${msg.name} quer uma batalha amistosa com você. As criaturas lutam com Vida cheia e ninguém perde nada.`
-        : `${msg.name} quer trocar criaturas com você. Cada um escolhe uma e os dois precisam confirmar.`,
+        : msg.kind === "friend"
+          ? `${msg.name} quer ser seu amigo. Amigos aparecem na sua lista, com onde estão quando estiverem online.`
+          : `${msg.name} quer trocar criaturas com você. Cada um escolhe uma e os dois precisam confirmar.`,
     ),
   );
   const actions = el("div", "social-actions");
@@ -60,7 +66,7 @@ export function showSocialRequest(room: Room, msg: SocialRequestMessage) {
     btn("Recusar", () => closeModal(), "ghost"),
   );
   body.append(actions);
-  openModal("request", msg.kind === "battle" ? "Desafio!" : "Proposta de troca", body, { onClose: () => answer(false) });
+  openModal("request", msg.kind === "battle" ? "Desafio!" : msg.kind === "friend" ? "Pedido de amizade" : "Proposta de troca", body, { onClose: () => answer(false) });
   window.setTimeout(() => {
     if (!answered && isModalOpen("request")) closeModal();
   }, SOCIAL_REQUEST_MS - 1000);

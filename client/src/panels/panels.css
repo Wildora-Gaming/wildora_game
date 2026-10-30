@@ -144,3 +144,57 @@
 .box-search { flex: 1 1 180px; min-width: 0; font: 600 15px system-ui, sans-serif; padding: 7px 10px; border: 2px solid #1f2430; border-radius: 8px; background: #fffaf0; color: #1f2430; }
 .box-sort { flex: 0 1 auto; font: 700 14px var(--pixel); padding: 6px 8px; border: 2px solid #1f2430; border-radius: 8px; background: #e2dccb; color: #1f2430; }
 .box-count { margin-top: -2px; }
+
+/* viagem rápida */
+.travel-list { display: grid; gap: 6px; }
+.travel-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #fffaf0; border: 2px solid #c9c1ad; border-radius: 10px; }
+.travel-row .i-text { flex: 1; min-width: 0; }
+.travel-row.locked { opacity: 0.6; border-style: dashed; }
+
+/* Livro de Criaturas */
+.modal.wide:has(.book) { width: min(900px, 100%); }
+.book-head { font-weight: 700; font-size: 16px; }
+.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.book-card { position: relative; display: grid; justify-items: center; align-content: start; gap: 2px; padding: 6px 4px 8px;
+  background: #fffaf0; border: 2px solid #c9c1ad; border-radius: 10px; cursor: pointer; font-family: var(--pixel); color: #1f2430; }
+.book-card:hover { border-color: #1f2430; }
+.book-card.on { border-color: #1f2430; background: #ffe9b0; }
+.book-card .creature-art { height: 60px; display: grid; place-items: end center; }
+.book-card .creature-art canvas { max-height: 56px; width: auto; image-rendering: pixelated; }
+.book-num { font-size: 11px; color: #5b6272; justify-self: start; }
+.book-name { font-size: 13px; font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-own { position: absolute; top: 4px; right: 6px; color: #2c7547; font-size: 12px; }
+.book-card.seen .creature-art canvas, .book-mini.seen canvas { filter: grayscale(1) contrast(0.9); opacity: 0.75; }
+.book-card.unseen .creature-art canvas, .book-mini.unseen canvas { filter: brightness(0); opacity: 0.55; }
+.book-card.unseen .book-name { color: #8a90a0; }
+.book-detail[hidden] { display: none; }
+.book-detail { display: grid; gap: 8px; padding: 10px 12px; background: #f1ece0; border: 2px solid #1f2430; border-radius: 10px; }
+.book-detail-top { display: flex; align-items: center; gap: 14px; }
+.book-detail-top canvas { image-rendering: pixelated; }
+.book-detail-info { display: grid; gap: 4px; }
+.book-detail-info strong { font-size: 20px; }
+.book-types { display: flex; gap: 4px; }
+.book-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.book-mini { display: grid; justify-items: center; gap: 2px; background: none; border: 0; cursor: pointer; font: 700 12px var(--pixel); color: #1f2430; }
+.book-arrow { font-size: 12px; color: #5b6272; }
+.book-where { margin: 0; padding-left: 18px; font-family: system-ui, sans-serif; font-size: 13px; }
+.book-stats { display: grid; gap: 4px; }
+.book-stat { display: grid; grid-template-columns: 82px 1fr 34px; align-items: center; gap: 8px; font-size: 13px; }
+.book-bar { height: 8px; background: #d6cdb6; border-radius: 4px; overflow: hidden; }
+.book-bar i { display: block; height: 100%; background: #3c9a5f; }
+.book-val { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .book-grid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); } .book-card .creature-art canvas { max-height: 44px; } }
+
+/* Social: amigos e ranking */
+.friend-list, .rank-list { display: grid; gap: 6px; }
+.friend-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #fffaf0; border: 2px solid #c9c1ad; border-radius: 10px; }
+.friend-row .i-text { flex: 1; min-width: 0; }
+.friend-dot { width: 10px; height: 10px; border-radius: 50%; background: #9aa0b4; border: 2px solid #1f2430; flex: none; }
+.friend-row.on .friend-dot { background: #3c9a5f; }
+.rank-row { display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 10px; padding: 6px 10px; background: #fffaf0; border: 2px solid #c9c1ad; border-radius: 10px; }
+.rank-row.me { border-color: #1f2430; background: #ffe9b0; }
+.rank-pos { font-weight: 700; text-align: center; border-radius: 99px; padding: 2px 0; }
+.rank-pos.top1 { background: #f2c53d; } .rank-pos.top2 { background: #c9ced8; } .rank-pos.top3 { background: #d99a5c; }
+.rank-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-val { font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+.rank-gap { text-align: center; color: #5b6272; }

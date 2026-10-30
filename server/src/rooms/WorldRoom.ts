@@ -1,7 +1,7 @@
 import { Room, Client, ServerError, type Delayed } from "@colyseus/core";
 import { Player, WorldState } from "../schema/WorldState";
 import { randomUUID } from "node:crypto";
-import { NameTakenError, type Listing, type Store, type Trainer } from "../store/types";
+import { NameTakenError, rankRow, type Listing, type RankRow, type Store, type Trainer } from "../store/types";
 import type { FileStore } from "../store/file-store";
 import { localAuth, type AuthProvider } from "../auth";
 import {
@@ -55,6 +55,7 @@ import { HEAL_POINT, LEGEND_SPOTS, SPAWN, WORLD_VERSION, doorOf, isWalkable, isW
 import { areaName, rollWildAt } from "../../../shared/creatures";
 import { getGym, gymStages, type Gym } from "../../../shared/gyms";
 import { tutorOption } from "../../../shared/tutor";
+import { TRAVEL_POINTS, getTravelPoint, travelCost, travelPointNear } from "../../../shared/travel";
 import {
   MARKET_FEE,
   MARKET_MAX_PER_SELLER,
@@ -164,6 +165,8 @@ interface SocialPending {
   kind: SocialKind;
   expires: number;
 }
+
+const MAX_FRIENDS = 50;
 
 const PLAYER_COLORS = [0xe4572e, 0x17bebb, 0xffc914, 0x76b041, 0x9b5de5, 0xf15bb5, 0x00bbf9, 0xfee440];
 
@@ -289,6 +292,10 @@ export class WorldRoom extends Room<WorldState> {
     this.onMessage("buy", (client, m: unknown) => this.handleBuy(client, m));
     this.onMessage("sell_item", (client, m: unknown) => this.handleSellItem(client, m));
     this.onMessage("npc_swap", (client, m: unknown) => this.handleNpcSwap(client, m));
+    this.onMessage("travel", (client, m: unknown) => this.handleTravel(client, m));
+    this.onMessage("friends_open", (client) => this.sendFriends(client));
+    this.onMessage("friend_remove", (client, m: unknown) => void this.handleFriendRemove(client, m));
+    this.onMessage("ranking_open", (client) => void this.handleRanking(client));
     this.onMessage("market_open", (client) => this.handleMarketOpen(client));
     this.onMessage("market_list", (client, m: unknown) => void this.handleMarketList(client, m));
     this.onMessage("market_buy", (client, m: unknown) => void this.handleMarketBuy(client, m));
@@ -462,6 +469,8 @@ export class WorldRoom extends Room<WorldState> {
       team: t.team.map((c) => toView(c)),
       box: t.box.map((c) => toView(c)),
       dex: { seen: t.dex.seen.length, caught: t.dex.caught.length },
+      dexSeen: t.dex.seen,
+      dexCaught: t.dex.caught,
       badges: t.badges,
     };
     client.send("profile", msg);
@@ -530,6 +539,7 @@ export class WorldRoom extends Room<WorldState> {
     s.trainer.y = ny;
     ack();
 
+    this.markVisited(client, s, nx, ny);
     if (this.roadChallenge(client, player, s)) return;
 
     const legend = this.state.legend;
@@ -918,6 +928,62 @@ export class WorldRoom extends Room<WorldState> {
     client.send("battle_start", msg);
   }
 
+  // ---------- Viagem rápida ----------
+
+  /** Chegou perto de um Centro/Posto de Cura: passa a poder viajar para ele. */
+  private markVisited(client: Client, s: Session, x: number, y: number) {
+    const point = travelPointNear(x, y);
+    if (!point) return;
+    const p = (s.trainer.progress ??= {});
+    const visited = (p.visited ??= ["vila"]);
+    if (visited.includes(point.id)) return;
+    visited.push(point.id);
+    this.store.markDirty(s.trainer);
+    if (point.id !== "vila") this.notice(client, `Novo destino de viagem rápida: ${point.name}.`);
+  }
+
+  /** Depois de curar: mostra para onde dá para viajar daqui. */
+  private sendTravelMenu(client: Client, s: Session, x: number, y: number) {
+    const here = travelPointNear(x, y, 4) ?? TRAVEL_POINTS[0];
+    const visited = new Set(s.trainer.progress?.visited ?? ["vila"]);
+    visited.add("vila");
+    client.send("heal_menu", {
+      here: here.id,
+      title: here.id === "vila" ? "Centro de Cura" : "Posto de Cura",
+      points: TRAVEL_POINTS.filter((p) => p.id !== here.id).map((p) => ({
+        id: p.id,
+        name: p.name,
+        cost: travelCost(here, p),
+        visited: visited.has(p.id),
+        x: p.x,
+        y: p.y,
+      })),
+    });
+  }
+
+  private handleTravel(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r || r.s.battle || r.s.duel || r.s.trade) return;
+    const { s, player } = r;
+    if (!this.nearRole(player, "heal")) return this.notice(client, "A viagem rápida sai de um Centro ou Posto de Cura.");
+    const here = travelPointNear(player.x, player.y, 4);
+    const to = getTravelPoint((message as { to?: unknown } | null)?.to);
+    if (!here || !to || to.id === here.id) return;
+    const visited = s.trainer.progress?.visited ?? ["vila"];
+    if (to.id !== "vila" && !visited.includes(to.id)) return this.notice(client, "Você ainda não conhece esse lugar. Vá até lá andando uma vez.");
+    const cost = travelCost(here, to);
+    if (s.trainer.money < cost) return this.notice(client, `A viagem custa ${cost} Sementes.`);
+    s.trainer.money -= cost;
+    player.x = to.x;
+    player.y = to.y;
+    player.dir = "down";
+    s.trainer.x = to.x;
+    s.trainer.y = to.y;
+    this.store.markDirty(s.trainer);
+    this.sendProfile(client);
+    this.notice(client, `Você viajou para ${to.name} (−${cost} Sementes).`);
+  }
+
   // ---------- Mercador viajante ----------
 
   private merchantTimer: Delayed | null = null;
@@ -1220,7 +1286,7 @@ export class WorldRoom extends Room<WorldState> {
         for (const c of s.trainer.team) healFully(c);
         this.store.markDirty(s.trainer);
         this.sendProfile(client);
-        dialog("Centro de Cura", "Seu time foi totalmente recuperado. Volte sempre que precisar!");
+        this.sendTravelMenu(client, s, tx, ty);
       } else if (obj.role === "tutor") {
         client.send("tutor_open", {});
       } else {
@@ -1514,7 +1580,7 @@ export class WorldRoom extends Room<WorldState> {
     if (!r) return;
     const m = message as { target?: unknown; kind?: unknown } | null;
     const target = typeof m?.target === "string" ? m.target : "";
-    const kind = m?.kind === "battle" || m?.kind === "trade" ? m.kind : null;
+    const kind = m?.kind === "battle" || m?.kind === "trade" || m?.kind === "friend" ? m.kind : null;
     if (!kind || target === client.sessionId) return;
     const now = Date.now();
     if (now - r.s.lastSocialAt < 1500) return;
@@ -1522,6 +1588,16 @@ export class WorldRoom extends Room<WorldState> {
     const other = this.state.players.get(target);
     const otherClient = this.clientOf(target);
     if (!other || !otherClient) return this.notice(client, "Esse treinador não está mais aqui.");
+    if (kind === "friend") {
+      const os = this.sessions.get(target)!;
+      if ((r.s.trainer.progress?.friends ?? []).some((f) => f.id === os.trainer.id)) return this.notice(client, `${other.name} já é seu amigo.`);
+      if ((r.s.trainer.progress?.friends ?? []).length >= MAX_FRIENDS) return this.notice(client, `Você já tem ${MAX_FRIENDS} amigos.`);
+      this.pending = this.pending.filter((p) => p.expires > now && !(p.from === client.sessionId && p.to === target));
+      this.pending.push({ from: client.sessionId, to: target, kind, expires: now + SOCIAL_REQUEST_MS });
+      const msg: SocialRequestMessage = { from: client.sessionId, name: r.player.name, kind };
+      otherClient.send("social_request", msg);
+      return this.notice(client, `Pedido de amizade enviado para ${other.name}.`);
+    }
     if (!this.isFree(client.sessionId)) return this.notice(client, "Termine o que está fazendo antes.");
     if (!this.isFree(target)) return this.notice(client, `${other.name} está ocupado agora.`);
     if (this.distance(client.sessionId, target) > SOCIAL_RANGE) return this.notice(client, `Chegue mais perto de ${other.name}.`);
@@ -1548,8 +1624,9 @@ export class WorldRoom extends Room<WorldState> {
       if (m?.accept === true) this.notice(client, "Esse pedido não vale mais.");
       return;
     }
-    const what = req.kind === "battle" ? "batalha" : "troca";
-    if (m?.accept !== true) return this.notice(fromClient, `${r.player.name} recusou a ${what}.`);
+    const what = req.kind === "battle" ? "a batalha" : req.kind === "trade" ? "a troca" : "o pedido de amizade";
+    if (m?.accept !== true) return this.notice(fromClient, `${r.player.name} recusou ${what}.`);
+    if (req.kind === "friend") return this.makeFriends(from, client.sessionId);
     if (!this.isFree(from) || !this.isFree(client.sessionId)) return this.notice(client, "Um de vocês está ocupado agora.");
     if (this.distance(from, client.sessionId) > SOCIAL_RANGE + 2) {
       this.notice(client, `${fromPlayer.name} se afastou.`);
@@ -1557,6 +1634,92 @@ export class WorldRoom extends Room<WorldState> {
     }
     if (req.kind === "battle") this.startDuel(from, client.sessionId);
     else this.startTrade(from, client.sessionId);
+  }
+
+  // ---------- Amigos ----------
+
+  private makeFriends(a: string, b: string) {
+    const sa = this.sessions.get(a);
+    const sb = this.sessions.get(b);
+    if (!sa || !sb) return;
+    const add = (s: Session, other: Trainer) => {
+      const list = ((s.trainer.progress ??= {}).friends ??= []);
+      if (!list.some((f) => f.id === other.id)) list.push({ id: other.id, name: other.name });
+      this.store.markDirty(s.trainer);
+    };
+    add(sa, sb.trainer);
+    add(sb, sa.trainer);
+    for (const [id, other] of [[a, sb], [b, sa]] as const) {
+      const c = this.clientOf(id);
+      if (c) {
+        this.notice(c, `Agora você e ${other.trainer.name} são amigos!`);
+        this.sendFriends(c);
+      }
+    }
+  }
+
+  /** Lista de amigos: quem está online e onde. */
+  private sendFriends(client: Client) {
+    const s = this.sessions.get(client.sessionId);
+    if (!s) return;
+    const online = new Map<string, string>();
+    for (const [sid, ss] of this.sessions) online.set(ss.trainer.id, sid);
+    const friends = (s.trainer.progress?.friends ?? []).map((f) => {
+      const sid = online.get(f.id);
+      const p = sid ? this.state.players.get(sid) : undefined;
+      return {
+        id: f.id,
+        name: p?.name ?? f.name,
+        online: !!p,
+        area: p ? areaName(p.x, p.y) : "",
+        x: p?.x ?? 0,
+        y: p?.y ?? 0,
+        busy: !!p?.inBattle,
+      };
+    });
+    friends.sort((x, y) => Number(y.online) - Number(x.online) || x.name.localeCompare(y.name, "pt-BR"));
+    client.send("friends", { friends });
+  }
+
+  /** Desfaz a amizade dos dois lados (o outro pode estar offline). */
+  private async handleFriendRemove(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r) return;
+    const id = (message as { id?: unknown } | null)?.id;
+    const list = r.s.trainer.progress?.friends ?? [];
+    const f = list.find((x) => x.id === id);
+    if (!f) return;
+    r.s.trainer.progress!.friends = list.filter((x) => x.id !== f.id);
+    this.store.markDirty(r.s.trainer);
+    const otherSession = [...this.sessions.values()].find((ss) => ss.trainer.id === f.id);
+    const other = otherSession?.trainer ?? LOADED.get(f.id) ?? (await this.store.get(f.id).catch(() => undefined));
+    if (other?.progress?.friends) {
+      other.progress.friends = other.progress.friends.filter((x) => x.id !== r.s.trainer.id);
+      if (otherSession) this.store.markDirty(other);
+      else await this.store.save(other).catch((err) => console.error("[amigos] falha ao salvar:", err));
+    }
+    this.notice(client, `${f.name} saiu da sua lista de amigos.`);
+    this.sendFriends(client);
+  }
+
+  // ---------- Ranking ----------
+
+  private rankingCache: { at: number; rows: RankRow[] } | null = null;
+
+  private async handleRanking(client: Client) {
+    const now = Date.now();
+    if (!this.rankingCache || now - this.rankingCache.at > 30_000) {
+      const rows = await this.store.ranking().catch((err) => {
+        console.error("[ranking] falha ao ler:", err);
+        return [] as RankRow[];
+      });
+      this.rankingCache = { at: now, rows };
+    }
+    // quem está online tem os números mais novos na memória
+    const byId = new Map(this.rankingCache.rows.map((row) => [row.id, row]));
+    for (const s of this.sessions.values()) byId.set(s.trainer.id, rankRow(s.trainer));
+    const me = this.sessions.get(client.sessionId)?.trainer.id;
+    client.send("ranking", { rows: [...byId.values()], me });
   }
 
   /** Saiu do jogo: perde a batalha amistosa, cancela troca e pedidos. */

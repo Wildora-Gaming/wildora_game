@@ -12,6 +12,8 @@ import { grassOverlay, objectArt, objectKey, renderGroundChunk } from "../world/
 import { ensureAvatar, frameIndex } from "../avatar/sheet";
 import { toast } from "../toast";
 import { Minimap, openWorldMap, type MapMarkers } from "../world/minimap";
+import { openBook } from "../panels/book";
+import { openSocial } from "../panels/friends";
 import { sound } from "../audio/audio";
 
 /** Zoom da câmera: cada pixel da arte vira um bloco de N pixels na tela (2 em celular, para ver mais do mapa). */
@@ -764,6 +766,12 @@ export class WorldScene extends Phaser.Scene {
         openBagPanel(this.room);
       } else if (k === "m") {
         this.openMap();
+      } else if (k === "l") {
+        this.held = [];
+        openBook();
+      } else if (k === "f") {
+        this.held = [];
+        openSocial(this.room);
       }
     });
     window.addEventListener("keyup", (e) => {

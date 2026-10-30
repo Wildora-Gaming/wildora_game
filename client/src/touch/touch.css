@@ -17,13 +17,13 @@
 .dpad-knob { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%;
   background: rgba(255, 255, 255, 0.28); border: 2px solid rgba(255, 255, 255, 0.4); pointer-events: none; }
 
-.touch-actions { pointer-events: none; display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto auto;
+.touch-actions { pointer-events: none; display: grid; grid-template-columns: auto auto; grid-template-rows: repeat(5, auto);
   gap: 10px; align-items: end; justify-items: end; }
 .t-btn { pointer-events: auto; touch-action: manipulation; font-family: var(--pixel); font-weight: 700; color: #1f2430;
   border: 3px solid #1f2430; cursor: pointer; box-shadow: inset 0 -4px 0 #0000002e; }
 .t-btn:active { filter: brightness(0.92); transform: translateY(1px); }
 .t-small { grid-column: 1; min-width: 92px; padding: 8px 10px; font-size: 15px; border-radius: 10px; background: #c9d2e3; }
-.t-main { grid-column: 2; grid-row: 2 / span 2; width: 78px; height: 78px; border-radius: 50%; font-size: 30px;
+.t-main { grid-column: 2; grid-row: 4 / span 2; width: 78px; height: 78px; border-radius: 50%; font-size: 30px;
   background: #ffd84a; }
 
 /* Com teclado virtual aberto (digitando no chat), o direcional some */
@@ -38,7 +38,7 @@ html.touch input, html.touch textarea { -webkit-user-select: text; user-select: 
 html.touch .dpad, html.touch .dpad * { touch-action: none; }
 html.touch #game { touch-action: none; }
 html.touch .kbd, html.touch .hud-help { display: none !important; }
-html.touch #hud-team-btn, html.touch #hud-bag-btn { display: none; }
+html.touch #hud-team-btn, html.touch #hud-bag-btn, html.touch #hud-map-btn, html.touch #hud-book-btn, html.touch #hud-social-btn { display: none; }
 html.touch #hud { top: max(8px, env(safe-area-inset-top)); left: 8px; right: 8px; gap: 6px; }
 html.touch #hud > * { font-size: 13px; padding: 4px 8px; }
 
@@ -68,3 +68,14 @@ html.touch.chat-open .chat-close { display: block; align-self: flex-end; }
 /* minimapa menor no celular, abaixo da barra de cima, à direita */
 html.touch #minimap { top: calc(max(8px, env(safe-area-inset-top)) + 62px); right: 8px; border-width: 2px; }
 html.touch #minimap canvas { width: 112px; height: 84px; }
+
+/* celular deitado: pouca altura, os botões pequenos ficam em duas colunas */
+@media (max-height: 480px) {
+  .touch-actions { grid-template-columns: auto auto auto; grid-template-rows: repeat(3, auto); }
+  .t-btn[data-act="book"] { grid-column: 1; grid-row: 2; }
+  .t-btn[data-act="social"] { grid-column: 1; grid-row: 3; }
+  .t-btn[data-act="chat"] { grid-column: 2; grid-row: 1; }
+  .t-btn[data-act="bag"] { grid-column: 2; grid-row: 2; }
+  .t-btn[data-act="team"] { grid-column: 2; grid-row: 3; }
+  .t-main { grid-column: 3; grid-row: 2 / span 2; }
+}

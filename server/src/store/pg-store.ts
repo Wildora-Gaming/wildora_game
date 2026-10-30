@@ -3,7 +3,7 @@
 import type { Creature } from "../../../shared/battle/engine";
 import type { StatusId } from "../../../shared/battle/data";
 import type { Db } from "./db";
-import { BatchedStore, NameTakenError, decodeX, encodeX, nameKey, type Listing, type Progress, type Trainer } from "./types";
+import { BatchedStore, LEGEND_IDS, NameTakenError, decodeX, encodeX, nameKey, type Listing, type Progress, type RankRow, type Trainer } from "./types";
 
 interface TrainerRow {
   id: string;
@@ -72,6 +72,18 @@ export class PgStore extends BatchedStore {
         console.error("[store] não consegui atualizar o banco (rode supabase/schema.sql):", sql.split("\n")[0], err);
       }
     }
+  }
+
+  async ranking(): Promise<RankRow[]> {
+    const r = await this.db.query<{ id: string; name: string; wins: number; badges: number | string; caught: number | string; legends: number | string }>(
+      `select t.id, t.name, t.wins,
+         (select count(*) from public.badges b where b.owner_id = t.id)::int as badges,
+         (select count(*) from public.dex d where d.owner_id = t.id and d.caught_at is not null)::int as caught,
+         (select count(distinct c.species_id) from public.creatures c where c.owner_id = t.id and c.species_id = any($1))::int as legends
+       from public.trainers t`,
+      [LEGEND_IDS],
+    );
+    return r.rows.map((row) => ({ id: row.id, name: row.name, wins: Number(row.wins), badges: Number(row.badges), caught: Number(row.caught), legends: Number(row.legends) }));
   }
 
   // ---------- Mercado ----------

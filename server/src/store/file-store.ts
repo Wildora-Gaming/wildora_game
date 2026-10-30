@@ -3,7 +3,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { BatchedStore, NameTakenError, nameKey, type Listing, type Trainer } from "./types";
+import { BatchedStore, NameTakenError, nameKey, rankRow, type Listing, type Trainer } from "./types";
 
 interface LocalCredential {
   salt: string;
@@ -73,6 +73,10 @@ export class FileStore extends BatchedStore {
 
   async close() {
     await this.flush();
+  }
+
+  async ranking() {
+    return [...this.byId.values()].map(rankRow);
   }
 
   // ---------- Mercado ----------
