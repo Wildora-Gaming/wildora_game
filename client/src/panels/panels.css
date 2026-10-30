@@ -138,3 +138,9 @@
 .swap-deal { display: flex; align-items: center; justify-content: center; gap: 16px; }
 .swap-side { display: grid; justify-items: center; gap: 4px; }
 .swap-arrow { font-size: 28px; font-weight: 700; }
+
+/* caixa: busca e ordem */
+.box-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.box-search { flex: 1 1 180px; min-width: 0; font: 600 15px system-ui, sans-serif; padding: 7px 10px; border: 2px solid #1f2430; border-radius: 8px; background: #fffaf0; color: #1f2430; }
+.box-sort { flex: 0 1 auto; font: 700 14px var(--pixel); padding: 6px 8px; border: 2px solid #1f2430; border-radius: 8px; background: #e2dccb; color: #1f2430; }
+.box-count { margin-top: -2px; }

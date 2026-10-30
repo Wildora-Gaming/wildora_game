@@ -143,9 +143,99 @@ export function creatureRow(c: CreatureView, actions: HTMLElement[] = [], compac
 
 // ---------------- Time e caixa ----------------
 
+type BoxSort = "recent" | "level_desc" | "level_asc" | "az" | "za" | "hp_desc" | "hp_asc";
+const BOX_SORTS: [BoxSort, string][] = [
+  ["recent", "Chegada (mais recentes)"],
+  ["level_desc", "Nível: maior primeiro"],
+  ["level_asc", "Nível: menor primeiro"],
+  ["az", "Nome: A–Z"],
+  ["za", "Nome: Z–A"],
+  ["hp_desc", "Vida: maior primeiro"],
+  ["hp_asc", "Vida: menor primeiro"],
+];
+const SORT_KEY = "wildora:box-sort";
+
+/** Busca sem acento e sem maiúscula ("pétal" acha Petallia). */
+const fold = (t: string) => t.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
+function sortBox(list: { c: CreatureView; i: number }[], sort: BoxSort) {
+  const byName = (a: { c: CreatureView }, b: { c: CreatureView }) => a.c.name.localeCompare(b.c.name, "pt-BR");
+  const out = [...list];
+  switch (sort) {
+    case "recent": return out.reverse();
+    case "level_desc": return out.sort((a, b) => b.c.level - a.c.level || byName(a, b));
+    case "level_asc": return out.sort((a, b) => a.c.level - b.c.level || byName(a, b));
+    case "az": return out.sort((a, b) => byName(a, b) || b.c.level - a.c.level);
+    case "za": return out.sort((a, b) => byName(b, a) || b.c.level - a.c.level);
+    case "hp_desc": return out.sort((a, b) => b.c.maxHp - a.c.maxHp || b.c.hp - a.c.hp);
+    case "hp_asc": return out.sort((a, b) => a.c.maxHp - b.c.maxHp || a.c.hp - b.c.hp);
+  }
+}
+
 export function openTeamPanel(room: Room) {
   const body = el("div", "modal-body");
   let tab: "team" | "box" = "team";
+  let sort: BoxSort = "recent";
+  try {
+    const saved = localStorage.getItem(SORT_KEY) as BoxSort | null;
+    if (saved && BOX_SORTS.some(([k]) => k === saved)) sort = saved;
+  } catch {
+    /* sem armazenamento: fica a ordem padrão */
+  }
+  let query = "";
+
+  // controles da caixa: criados uma vez para a busca não perder o foco a cada letra
+  const search = el("input", "box-search");
+  search.type = "search";
+  search.id = "box-search";
+  search.placeholder = "Buscar por nome ou tipo";
+  search.autocomplete = "off";
+  search.addEventListener("input", () => {
+    query = search.value;
+    fillBox();
+  });
+  search.addEventListener("keydown", (e) => e.stopPropagation());
+  const select = el("select", "box-sort");
+  select.id = "box-sort";
+  select.setAttribute("aria-label", "Ordenar a caixa");
+  for (const [k, label] of BOX_SORTS) {
+    const o = el("option", "", label);
+    o.value = k;
+    select.append(o);
+  }
+  select.value = sort;
+  select.addEventListener("change", () => {
+    sort = select.value as BoxSort;
+    try {
+      localStorage.setItem(SORT_KEY, sort);
+    } catch {
+      /* ignora */
+    }
+    fillBox();
+  });
+  const controls = el("div", "box-controls");
+  controls.append(search, select);
+  const count = el("p", "hint box-count");
+  const boxList = el("div", "c-list");
+
+  const fillBox = () => {
+    const p = uiState.profile;
+    if (!p) return;
+    boxList.replaceChildren();
+    const q = fold(query.trim());
+    const all = p.box.map((c, i) => ({ c, i }));
+    const shown = sortBox(
+      all.filter(({ c }) => !q || fold(c.name).includes(q) || c.types.some((t) => fold(TYPE_LABEL[t]).includes(q))),
+      sort,
+    );
+    count.textContent = q ? `${shown.length} de ${all.length} criaturas` : `${all.length} criaturas na caixa`;
+    if (!all.length) boxList.append(el("p", "empty", "A caixa está vazia."));
+    else if (!shown.length) boxList.append(el("p", "empty", `Nenhuma criatura com "${query.trim()}".`));
+    for (const { c, i } of shown) {
+      boxList.append(creatureRow(c, [btn("Levar ao time", () => room.send("box_withdraw", { index: i }), "", p.team.length >= TEAM_MAX)]));
+    }
+  };
+
   const render = () => {
     const p = uiState.profile;
     if (!p) return;
@@ -156,8 +246,8 @@ export function openTeamPanel(room: Room) {
       btn(`Caixa (${p.box.length})`, () => ((tab = "box"), render()), tab === "box" ? "tab active" : "tab"),
     );
     body.append(tabs);
-    const list = el("div", "c-list");
     if (tab === "team") {
+      const list = el("div", "c-list");
       p.team.forEach((c, i) => {
         const actions = [
           btn(i === 0 ? "Líder" : "Tornar líder", () => room.send("team_order", { from: i, to: 0 }), "", i === 0),
@@ -165,13 +255,12 @@ export function openTeamPanel(room: Room) {
         ];
         list.append(creatureRow(c, actions));
       });
-      body.append(list, el("p", "hint", "A líder entra primeiro nas batalhas. Criaturas capturadas com o time cheio vão para a caixa."));
+      body.append(list, el("p", "hint", "A líder entra primeiro nas batalhas e anda com você. Criaturas capturadas com o time cheio vão para a caixa."));
     } else {
-      if (!p.box.length) list.append(el("p", "empty", "A caixa está vazia."));
-      p.box.forEach((c, i) => {
-        list.append(creatureRow(c, [btn("Levar ao time", () => room.send("box_withdraw", { index: i }), "", p.team.length >= TEAM_MAX)]));
-      });
-      body.append(list);
+      const focused = document.activeElement === search;
+      body.append(controls, count, boxList);
+      fillBox();
+      if (focused) search.focus();
     }
     const foot = el("div", "dex-line", `Criaturas vistas: ${p.dex.seen} · capturadas: ${p.dex.caught}`);
     body.append(foot, badgeRow(p.badges));
