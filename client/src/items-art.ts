@@ -19,7 +19,7 @@ function orbSvg(id: string) {
 }
 
 function potionSvg(id: string) {
-  const liquid = id === "super_pocao" ? "#b05cd6" : "#e5484d";
+  const liquid = id === "super_pocao" ? "#b05cd6" : id === "hiper_pocao" ? "#f2c53d" : "#e5484d";
   return `<svg viewBox="0 0 16 16" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
 <path fill="#2a2233" d="M6 1h4v1h1v3h1v1h1v8h-1v1H4v-1H3V6h1V5h1V2h1z"/>
 <path fill="#c9935a" d="M6 2h4v2H6z"/>

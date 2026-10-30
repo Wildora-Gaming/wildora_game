@@ -79,9 +79,27 @@ defineTypes(Legend, {
   endsAt: "float64",
 });
 
+/** Onde está o Mercador viajante (x = 0: nenhum). */
+export class Merchant extends Schema {
+  declare x: number;
+  declare y: number;
+  declare region: string;
+  /** quando muda de lugar (ms desde 1970) */
+  declare until: number;
+  constructor() {
+    super();
+    this.x = 0;
+    this.y = 0;
+    this.region = "";
+    this.until = 0;
+  }
+}
+defineTypes(Merchant, { x: "uint8", y: "uint8", region: "string", until: "float64" });
+
 export class WorldState extends Schema {
   declare players: MapSchema<Player>;
   declare legend: Legend;
+  declare merchant: Merchant;
   /** Noite no ciclo dia/noite (afeta encontros e o visual) */
   declare night: boolean;
 
@@ -90,10 +108,12 @@ export class WorldState extends Schema {
     this.players = new MapSchema<Player>();
     this.night = false;
     this.legend = new Legend();
+    this.merchant = new Merchant();
   }
 }
 defineTypes(WorldState, {
   players: { map: Player },
   night: "boolean",
   legend: Legend,
+  merchant: Merchant,
 });

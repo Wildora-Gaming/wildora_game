@@ -6,12 +6,13 @@ import { WorldScene } from "./scenes/WorldScene";
 import { BattleUI } from "./battle/BattleUI";
 import { editLook, runCreator, type StartOptions } from "./creator/creator";
 import { makeSupabase, readEmailLink, runAuth } from "./auth/auth";
-import { openBagPanel, openGymOffer, openShop, openTeamPanel, showDialog } from "./panels/panels";
+import { isModalOpen, openBagPanel, openGymOffer, openShop, openTeamPanel, showDialog } from "./panels/panels";
 import { setProfile, uiState } from "./ui-state";
 import { toast } from "./toast";
 import { markTouch, setupTouch } from "./touch/touch";
 import { openPlayerMenu, setupTrade, showSocialRequest } from "./panels/social";
 import { openTutor } from "./panels/tutor";
+import { openMarket, openNpcSwap, type MarketMessage, type NpcSwapMessage } from "./panels/market";
 import { sound } from "./audio/audio";
 import { setupSoundPanel } from "./audio/sound-panel";
 import type {
@@ -123,6 +124,12 @@ function startGame(room: Room) {
     sound.sfx("door");
     openShop(room, msg);
   });
+  room.onMessage("market", (msg: MarketMessage) => {
+    if (!isModalOpen("market")) sound.sfx("door");
+    openMarket(room, msg);
+  });
+  room.onMessage("npc_swap", (msg: NpcSwapMessage) => openNpcSwap(room, msg));
+  room.onMessage("npc_swap_done", () => sound.sfx("ping"));
   room.onMessage("tutor_open", () => {
     sound.sfx("door");
     openTutor(room);

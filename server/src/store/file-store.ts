@@ -3,7 +3,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { BatchedStore, NameTakenError, nameKey, type Trainer } from "./types";
+import { BatchedStore, NameTakenError, nameKey, type Listing, type Trainer } from "./types";
 
 interface LocalCredential {
   salt: string;
@@ -13,6 +13,7 @@ interface LocalCredential {
 interface FileShape {
   version: 2;
   trainers: (Trainer & { credential?: LocalCredential })[];
+  market?: Listing[];
 }
 
 function hashPassword(password: string, salt: string) {
@@ -24,6 +25,7 @@ export class FileStore extends BatchedStore {
   private byId = new Map<string, Trainer>();
   private byKey = new Map<string, Trainer>();
   private credentials = new Map<string, LocalCredential>();
+  private market = new Map<string, Listing>();
 
   constructor(private file: string, delayMs = 2000) {
     super(delayMs);
@@ -37,6 +39,7 @@ export class FileStore extends BatchedStore {
         const cred = credential ?? (salt && hash ? { salt, hash } : undefined); // formato antigo
         if (cred) this.credentials.set(t.id, cred);
       }
+      for (const l of data.market ?? []) this.market.set(l.id, l);
     }
   }
 
@@ -72,6 +75,22 @@ export class FileStore extends BatchedStore {
     await this.flush();
   }
 
+  // ---------- Mercado ----------
+
+  async marketAll() {
+    return [...this.market.values()];
+  }
+
+  async marketPut(l: Listing) {
+    this.market.set(l.id, l);
+    this.writeFile();
+  }
+
+  async marketDelete(id: string) {
+    this.market.delete(id);
+    this.writeFile();
+  }
+
   // ---------- contas do modo local ----------
 
   findByName(name: string) {
@@ -97,6 +116,7 @@ export class FileStore extends BatchedStore {
     const data: FileShape = {
       version: 2,
       trainers: [...this.byId.values()].map((t) => ({ ...t, credential: this.credentials.get(t.id) })),
+      market: [...this.market.values()],
     };
     const tmp = `${this.file}.tmp`;
     writeFileSync(tmp, JSON.stringify(data));

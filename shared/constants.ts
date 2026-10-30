@@ -120,6 +120,9 @@ export interface DialogMessage {
   text: string;
 }
 export interface ShopMessage {
+  /** loja da vila (compra e venda) ou mercador viajante (só compra) */
+  shop: "loja" | "mercador";
+  title: string;
   items: { id: string; name: string; description: string; price: number }[];
   money: number;
 }

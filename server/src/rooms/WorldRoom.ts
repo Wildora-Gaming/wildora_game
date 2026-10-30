@@ -1,7 +1,7 @@
 import { Room, Client, ServerError, type Delayed } from "@colyseus/core";
 import { Player, WorldState } from "../schema/WorldState";
 import { randomUUID } from "node:crypto";
-import { NameTakenError, type Store, type Trainer } from "../store/types";
+import { NameTakenError, type Listing, type Store, type Trainer } from "../store/types";
 import type { FileStore } from "../store/file-store";
 import { localAuth, type AuthProvider } from "../auth";
 import {
@@ -52,9 +52,19 @@ import {
   type PvpState,
 } from "../../../shared/battle/pvp";
 import { HEAL_POINT, LEGEND_SPOTS, SPAWN, WORLD_VERSION, doorOf, isWalkable, isWildTile, objectAt, tileAt } from "../../../shared/map";
-import { rollWild, zoneAt } from "../../../shared/creatures";
+import { areaName, rollWild, zoneAt } from "../../../shared/creatures";
 import { getGym, gymStages, type Gym } from "../../../shared/gyms";
 import { tutorOption } from "../../../shared/tutor";
+import {
+  MARKET_FEE,
+  MARKET_MAX_PER_SELLER,
+  MARKET_MAX_PRICE,
+  MERCHANT_STAY_MS,
+  MERCHANT_STOCK,
+  creatureSellPrice,
+  itemSellPrice,
+} from "../../../shared/economy";
+import { MERCHANT, MERCHANT_SPOTS, NPCS, dayNumber, getNpc, roadReward, type Npc, type QuestTask } from "../../../shared/npcs";
 import { TYPE_LABEL } from "../../../shared/battle/types";
 import { sanitizeLook } from "../../../shared/avatar/look";
 import { STARTERS, STARTER_LEVEL, getMove, getSpecies, isSpeciesId } from "../../../shared/battle/data";
@@ -114,6 +124,10 @@ interface Session {
   lastLookAt: number;
   /** a batalha atual é contra o lendário do evento */
   legendBattle: boolean;
+  /** batalha contra um treinador da estrada (id do NPC) */
+  road: string | null;
+  /** treinadores da estrada que já desafiaram nesta conexão (não insistem logo de novo) */
+  roadSeen: Map<string, number>;
 }
 
 /** Lendário do evento (o estado público fica em state.legend). */
@@ -251,6 +265,10 @@ export class WorldRoom extends Room<WorldState> {
       }
     }, 5000);
     this.scheduleLegend(LEGEND_FIRST_MS);
+    this.marketReady = this.store.marketAll().then((list) => {
+      for (const l of list) this.market.set(l.id, l);
+    }).catch((err) => console.error("[mercado] falha ao carregar:", err));
+    this.moveMerchant(false);
     // salvamento periódico das posições
     this.clock.setInterval(() => { for (const s of this.sessions.values()) this.store.markDirty(s.trainer); }, 15000);
 
@@ -259,6 +277,13 @@ export class WorldRoom extends Room<WorldState> {
     this.onMessage("battle_action", (client, m: unknown) => this.handleBattleAction(client, m));
     this.onMessage("interact", (client) => this.handleInteract(client));
     this.onMessage("buy", (client, m: unknown) => this.handleBuy(client, m));
+    this.onMessage("sell_item", (client, m: unknown) => this.handleSellItem(client, m));
+    this.onMessage("npc_swap", (client, m: unknown) => this.handleNpcSwap(client, m));
+    this.onMessage("market_open", (client) => this.handleMarketOpen(client));
+    this.onMessage("market_list", (client, m: unknown) => void this.handleMarketList(client, m));
+    this.onMessage("market_buy", (client, m: unknown) => void this.handleMarketBuy(client, m));
+    this.onMessage("market_cancel", (client, m: unknown) => void this.handleMarketCancel(client, m));
+    this.onMessage("sell_creature", (client, m: unknown) => this.handleSellCreature(client, m));
     this.onMessage("use_item", (client, m: unknown) => this.handleUseItem(client, m));
     this.onMessage("team_order", (client, m: unknown) => this.handleTeamOrder(client, m));
     this.onMessage("box_deposit", (client, m: unknown) => this.handleBox(client, m, "deposit"));
@@ -366,9 +391,13 @@ export class WorldRoom extends Room<WorldState> {
       lastSocialAt: 0,
       lastLookAt: 0,
       legendBattle: false,
+      road: null,
+      roadSeen: new Map(),
     });
     trainer.lastSeen = Date.now();
+    trainer.progress ??= {};
     this.sendProfile(client);
+    void this.marketReady.then(() => this.collectSales(trainer));
     this.broadcastSystem(`${trainer.name} chegou à Vila Broto.`);
   }
 
@@ -467,6 +496,12 @@ export class WorldRoom extends Room<WorldState> {
     const { dx, dy } = DIRECTION_DELTA[dir];
     const nx = player.x + dx;
     const ny = player.y + dy;
+    const mc = this.state.merchant;
+    if (mc.x && mc.x === nx && mc.y === ny) {
+      // andar contra o Mercador abre a barraca
+      ack();
+      return this.openMerchant(client, s);
+    }
     if (!isWalkable(nx, ny)) {
       ack();
       // Andar contra a porta do Centro de Cura ou da Loja já entra
@@ -483,6 +518,8 @@ export class WorldRoom extends Room<WorldState> {
     s.trainer.x = nx;
     s.trainer.y = ny;
     ack();
+
+    if (this.roadChallenge(client, player, s)) return;
 
     const legend = this.state.legend;
     if (this.legend && legend.speciesId && legend.x === nx && legend.y === ny) {
@@ -550,7 +587,7 @@ export class WorldRoom extends Room<WorldState> {
     }
 
     const stage = s.gymRun ? gymStages(getGym(s.gymRun.gymId)!)[s.gymRun.stage] : null;
-    const foeAction = battle.wild ? chooseWildAction(battle, this.rng) : chooseTrainerAction(battle, this.rng, stage?.smart);
+    const foeAction = battle.wild ? chooseWildAction(battle, this.rng) : chooseTrainerAction(battle, this.rng, stage?.smart ?? 0.6);
     const events: BattleEvent[] = resolveTurn(battle, message, foeAction, this.rng);
     const t = s.trainer;
     let next: (() => void) | null = null;
@@ -579,7 +616,8 @@ export class WorldRoom extends Room<WorldState> {
       }
       // a vitória já trouxe o XP do motor; a captura ganha XP aqui
       if (battle.result === "caught") events.push(...awardExperience(battle));
-      const money = stage ? stage.reward : moneyReward(battle.foe.level);
+      const roadNpc = s.road ? getNpc(s.road) : undefined;
+      const money = stage ? stage.reward : roadNpc ? roadReward(roadNpc) : moneyReward(battle.foe.level);
       t.money += money;
       events.push({ t: "money", amount: money });
       // vencer criatura selvagem pode deixar um Doce Estelar
@@ -593,6 +631,7 @@ export class WorldRoom extends Room<WorldState> {
       if (s.gymRun && battle.result === "win") next = this.advanceGym(client, player, s);
     } else if (battle.result === "lose") {
       s.gymRun = null;
+      s.road = null;
       // Volta ao Centro de Cura com o time recuperado e perde um pouco de Sementes.
       for (const c of t.team) healFully(c);
       t.money = Math.max(0, t.money - Math.floor(t.money * 0.1));
@@ -623,6 +662,17 @@ export class WorldRoom extends Room<WorldState> {
     if (over) {
       s.battle = null;
       player.inBattle = false;
+      // missões e treinadores da estrada
+      if (battle.wild && !s.legendBattle && (battle.result === "win" || battle.result === "caught")) {
+        this.questEvent(client, t, { kind: battle.result === "caught" ? "catch" : "win", species: battle.foe.speciesId, zone: s.battleZone });
+      }
+      if (s.road && battle.result === "win") {
+        const npc = getNpc(s.road)!;
+        (t.progress!.roadWins ??= {})[npc.id] = dayNumber(Date.now());
+        this.questEvent(client, t, { kind: "road" });
+        this.notice(client, `${npc.name}: Boa batalha! Amanhã quero revanche.`);
+      }
+      s.road = null;
       if (s.legendBattle) {
         s.legendBattle = false;
         const name = getSpecies(battle.foe.speciesId).name;
@@ -710,6 +760,335 @@ export class WorldRoom extends Room<WorldState> {
     st.busy = false;
     st.endsAt = 0;
     this.scheduleLegend(LEGEND_INTERVAL_MS);
+  }
+
+  // ---------- Personagens do mundo ----------
+
+  private dialog(client: Client, title: string, text: string) {
+    const msg: DialogMessage = { title, text };
+    client.send("dialog", msg);
+  }
+
+  /** Conversa com um NPC (Corretora, troca, missão ou treinador da estrada). */
+  private talkTo(client: Client, s: Session, npc: Npc) {
+    const t = s.trainer;
+    const p = (t.progress ??= {});
+    if (npc.role === "market") {
+      this.handleMarketOpen(client);
+    } else if (npc.role === "swap" && npc.swap) {
+      const done = (p.npcTrades ?? []).includes(npc.id);
+      const want = getSpecies(npc.swap.want).name;
+      const give = getSpecies(npc.swap.give).name;
+      if (done) return this.dialog(client, npc.name, `Obrigado de novo pela troca! Cuide bem do ${give}... digo, eu cuido bem do ${want}.`);
+      client.send("npc_swap", { npcId: npc.id, name: npc.name, hello: npc.hello, want: npc.swap.want, give: npc.swap.give });
+    } else if (npc.role === "quest" && npc.quests) {
+      const q = ((p.quests ??= {})[npc.id] ??= { step: -1, count: 0 });
+      if (q.step < 0) {
+        q.step = 0;
+        q.count = 0;
+        this.store.markDirty(t);
+        return this.dialog(client, npc.name, `${npc.hello} ${npc.quests[0].ask}`);
+      }
+      const quest = npc.quests[q.step];
+      if (!quest) return this.dialog(client, npc.name, "Você já me ajudou com tudo. Obrigada, de verdade!");
+      if (q.count < quest.task.count) {
+        return this.dialog(client, npc.name, `${quest.ask} (${q.count}/${quest.task.count})`);
+      }
+      // entrega a recompensa e passa para a próxima
+      const gifts: string[] = [];
+      if (quest.reward.money) {
+        t.money += quest.reward.money;
+        gifts.push(`${quest.reward.money} Sementes`);
+      }
+      for (const [id, n] of Object.entries(quest.reward.items ?? {})) {
+        t.bag[id] = (t.bag[id] ?? 0) + n;
+        gifts.push(`${n}× ${getItem(id)?.name ?? id}`);
+      }
+      q.step += 1;
+      q.count = 0;
+      this.store.markDirty(t);
+      this.sendProfile(client);
+      const next = npc.quests[q.step];
+      this.dialog(client, npc.name, `${quest.thanks} Você recebeu ${gifts.join(", ")}.${next ? ` Próximo pedido: ${next.ask}` : ""}`);
+    } else if (npc.role === "road") {
+      if (p.roadWins?.[npc.id] === dayNumber(Date.now())) {
+        return this.dialog(client, npc.name, "Você já me venceu hoje. Amanhã tem revanche!");
+      }
+      const player = this.state.players.get(client.sessionId);
+      if (player) this.beginRoadBattle(client, player, s, npc);
+    }
+  }
+
+  /** Conta progresso das missões aceitas. */
+  private questEvent(client: Client, t: Trainer, ev: { kind: QuestTask["kind"]; species?: string; zone?: string }) {
+    const quests = t.progress?.quests;
+    if (!quests) return;
+    for (const npc of NPCS) {
+      const q = quests[npc.id];
+      const quest = q && q.step >= 0 ? npc.quests?.[q.step] : undefined;
+      if (!q || !quest || q.count >= quest.task.count) continue;
+      const task = quest.task;
+      if (task.kind !== ev.kind) continue;
+      if ("zone" in task && task.zone && task.zone !== ev.zone) continue;
+      if ("species" in task && task.species && task.species !== ev.species) continue;
+      q.count += 1;
+      this.store.markDirty(t);
+      if (q.count >= task.count) this.notice(client, `Missão concluída! Volte para falar com ${npc.name}.`);
+    }
+  }
+
+  /** Troca com NPC: entrega a criatura pedida e recebe a outra, no mesmo nível. */
+  private handleNpcSwap(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r || r.s.battle || r.s.trade || r.s.duel) return;
+    const m = message as { npcId?: unknown; uid?: unknown } | null;
+    const npc = getNpc(m?.npcId);
+    if (!npc?.swap || !this.nearNpc(r.player, npc)) return;
+    const t = r.s.trainer;
+    const p = (t.progress ??= {});
+    if ((p.npcTrades ?? []).includes(npc.id)) return;
+    const inTeam = t.team.findIndex((c) => c.uid === m?.uid);
+    const inBox = t.box.findIndex((c) => c.uid === m?.uid);
+    const list = inTeam >= 0 ? t.team : inBox >= 0 ? t.box : null;
+    const index = inTeam >= 0 ? inTeam : inBox;
+    if (!list || list[index].speciesId !== npc.swap.want) return;
+    const old = list[index];
+    const got = createCreature(npc.swap.give, old.level);
+    got.caughtBy = t.id;
+    got.caughtAt = Date.now();
+    got.caughtZone = `Troca com ${npc.name}`;
+    list[index] = got;
+    for (const k of ["seen", "caught"] as const) if (!t.dex[k].includes(got.speciesId)) t.dex[k].push(got.speciesId);
+    (p.npcTrades ??= []).push(npc.id);
+    this.store.markDirty(t);
+    this.sendProfile(client);
+    client.send("npc_swap_done", {});
+    this.dialog(client, npc.name, `Muito obrigado! Cuide bem do ${getSpecies(got.speciesId).name} (Nv. ${got.level}).`);
+  }
+
+  private nearNpc(player: Player, npc: Npc) {
+    return Math.abs(player.x - npc.x) + Math.abs(player.y - npc.y) <= 1;
+  }
+
+  /** Treinador da estrada vê o jogador passando perto e desafia (uma vez por dia, se vencer). */
+  private roadChallenge(client: Client, player: Player, s: Session): boolean {
+    const now = Date.now();
+    for (const npc of NPCS) {
+      if (npc.role !== "road") continue;
+      if (Math.abs(player.x - npc.x) + Math.abs(player.y - npc.y) > 2) continue;
+      if (s.trainer.progress?.roadWins?.[npc.id] === dayNumber(now)) continue;
+      if (now - (s.roadSeen.get(npc.id) ?? 0) < 3 * 60_000) continue; // perdeu ou fugiu: não insiste logo
+      if (!s.trainer.team.some((c) => c.hp > 0)) continue;
+      s.roadSeen.set(npc.id, now);
+      this.notice(client, `${npc.name}: ${npc.hello}`);
+      this.beginRoadBattle(client, player, s, npc);
+      return true;
+    }
+    return false;
+  }
+
+  private beginRoadBattle(client: Client, player: Player, s: Session, npc: Npc) {
+    if (s.battle || s.duel || s.trade || !npc.team) return;
+    const foes = npc.team.map(([species, level]) => createCreature(species, level));
+    s.battle = startBattle(s.trainer.team, foes, false);
+    s.battleZone = areaName(npc.x, npc.y);
+    s.road = npc.id;
+    s.roadSeen.set(npc.id, Date.now());
+    player.inBattle = true;
+    for (const f of foes) if (!s.trainer.dex.seen.includes(f.speciesId)) s.trainer.dex.seen.push(f.speciesId);
+    const msg: BattleStartMessage = {
+      wild: false,
+      trainer: { name: npc.name, title: "Treinador da estrada", look: npc.look },
+      foeCount: foes.length,
+      team: s.trainer.team.map((c) => toView(c)),
+      active: s.battle.active,
+      foe: toView(foes[0], false),
+      zone: s.battleZone,
+    };
+    client.send("battle_start", msg);
+  }
+
+  // ---------- Mercador viajante ----------
+
+  private merchantTimer: Delayed | null = null;
+
+  /** Muda o Mercador para outro lugar (e avisa no chat). */
+  moveMerchant(announce = true) {
+    const st = this.state.merchant;
+    const options = MERCHANT_SPOTS.filter((sp) => sp.x !== st.x || sp.y !== st.y);
+    const spot = options[Math.floor(this.rng() * options.length)];
+    st.x = spot.x;
+    st.y = spot.y;
+    st.region = spot.region;
+    st.until = Date.now() + MERCHANT_STAY_MS;
+    if (announce) this.broadcastSystem(`${MERCHANT.name}, o mercador viajante, montou a barraca em ${spot.region}.`);
+    this.merchantTimer?.clear();
+    this.merchantTimer = this.clock.setTimeout(() => this.moveMerchant(), MERCHANT_STAY_MS);
+  }
+
+  private openMerchant(client: Client, s: Session) {
+    const msg: ShopMessage = {
+      shop: "mercador",
+      title: `${MERCHANT.name}, mercador viajante`,
+      items: MERCHANT_STOCK.map(({ itemId, price }) => {
+        const it = getItem(itemId)!;
+        return { id: itemId, name: it.name, description: it.description, price };
+      }),
+      money: s.trainer.money,
+    };
+    client.send("shop", msg);
+  }
+
+  // ---------- Mercado entre jogadores ----------
+
+  private market = new Map<string, Listing>();
+  private marketReady: Promise<void> = Promise.resolve();
+
+  private listingView(l: Listing, mine: boolean) {
+    return {
+      id: l.id,
+      seller: l.sellerName,
+      price: l.price,
+      creature: l.creature ? toView(l.creature) : undefined,
+      itemId: l.itemId,
+      qty: l.qty,
+      mine,
+      sold: !!l.soldAt,
+    };
+  }
+
+  private handleMarketOpen(client: Client) {
+    const r = this.ready(client);
+    if (!r || !this.nearRole(r.player, "market")) return;
+    void this.marketReady.then(() => {
+      const me = r.s.trainer.id;
+      const open = [...this.market.values()].filter((l) => !l.soldAt);
+      client.send("market", {
+        listings: open.filter((l) => l.sellerId !== me).map((l) => this.listingView(l, false)),
+        mine: open.filter((l) => l.sellerId === me).map((l) => this.listingView(l, true)),
+        fee: MARKET_FEE,
+        maxPerSeller: MARKET_MAX_PER_SELLER,
+      });
+    });
+  }
+
+  private async handleMarketList(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r || r.s.battle || r.s.trade || r.s.duel || !this.nearRole(r.player, "market")) return;
+    await this.marketReady;
+    const m = message as { uid?: unknown; itemId?: unknown; qty?: unknown; price?: unknown } | null;
+    const t = r.s.trainer;
+    const price = Number(m?.price);
+    if (!Number.isInteger(price) || price < 1 || price > MARKET_MAX_PRICE) return this.notice(client, "Escolha um preço entre 1 e 999.999 Sementes.");
+    const mine = [...this.market.values()].filter((l) => l.sellerId === t.id && !l.soldAt).length;
+    if (mine >= MARKET_MAX_PER_SELLER) return this.notice(client, `Você já tem ${MARKET_MAX_PER_SELLER} ofertas no Mercado.`);
+    const l: Listing = { id: randomUUID(), sellerId: t.id, sellerName: t.name, price, createdAt: Date.now() };
+    let what: string;
+    if (typeof m?.uid === "string") {
+      const ti = t.team.findIndex((c) => c.uid === m.uid);
+      const bi = t.box.findIndex((c) => c.uid === m.uid);
+      if (ti < 0 && bi < 0) return;
+      if (ti >= 0 && t.team.length <= 1) return this.notice(client, "Você precisa de pelo menos uma criatura no time.");
+      const [c] = ti >= 0 ? t.team.splice(ti, 1) : t.box.splice(bi, 1);
+      c.status = null;
+      c.statusTurns = 0;
+      l.creature = c;
+      what = `${getSpecies(c.speciesId).name} (Nv. ${c.level})`;
+    } else {
+      const item = getItem(m?.itemId);
+      const qty = Number(m?.qty);
+      if (!item || !Number.isInteger(qty) || qty < 1 || qty > 99 || (t.bag[item.id] ?? 0) < qty) return;
+      t.bag[item.id] -= qty;
+      if (t.bag[item.id] <= 0) delete t.bag[item.id];
+      l.itemId = item.id;
+      l.qty = qty;
+      what = `${qty}× ${item.name}`;
+    }
+    this.market.set(l.id, l);
+    // a oferta é gravada antes do treinador: se cair no meio, nada some
+    await this.store.marketPut(l).catch((err) => console.error("[mercado] falha ao gravar oferta:", err));
+    await this.store.save(t).catch(() => this.store.markDirty(t));
+    this.sendProfile(client);
+    this.notice(client, `Oferta publicada: ${what} por ${price} Sementes.`);
+    this.handleMarketOpen(client);
+  }
+
+  private async handleMarketBuy(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r || r.s.battle || r.s.trade || r.s.duel || !this.nearRole(r.player, "market")) return;
+    await this.marketReady;
+    const l = this.market.get(String((message as { id?: unknown } | null)?.id));
+    const t = r.s.trainer;
+    if (!l || l.soldAt || l.sellerId === t.id) return this.handleMarketOpen(client);
+    if (t.money < l.price) return this.notice(client, "Sementes insuficientes.");
+    t.money -= l.price;
+    let what: string;
+    if (l.creature) {
+      const c = l.creature;
+      if (t.team.length < TEAM_MAX) t.team.push(c);
+      else t.box.push(c);
+      for (const k of ["seen", "caught"] as const) if (!t.dex[k].includes(c.speciesId)) t.dex[k].push(c.speciesId);
+      what = `${getSpecies(c.speciesId).name} (Nv. ${c.level})`;
+    } else {
+      t.bag[l.itemId!] = (t.bag[l.itemId!] ?? 0) + (l.qty ?? 1);
+      what = `${l.qty}× ${getItem(l.itemId)?.name ?? l.itemId}`;
+    }
+    l.soldAt = Date.now();
+    l.buyerName = t.name;
+    await this.store.marketPut(l).catch((err) => console.error("[mercado] falha ao gravar venda:", err));
+    await this.store.save(t).catch(() => this.store.markDirty(t));
+    this.sendProfile(client);
+    this.notice(client, `Você comprou ${what} de ${l.sellerName} por ${l.price} Sementes.`);
+    // vendedor online recebe na hora; offline, recebe ao entrar
+    const seller = [...this.sessions.entries()].find(([, ss]) => ss.trainer.id === l.sellerId);
+    if (seller) await this.collectSales(seller[1].trainer);
+    this.handleMarketOpen(client);
+  }
+
+  private async handleMarketCancel(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r || r.s.battle || r.s.trade || r.s.duel || !this.nearRole(r.player, "market")) return;
+    await this.marketReady;
+    const l = this.market.get(String((message as { id?: unknown } | null)?.id));
+    const t = r.s.trainer;
+    if (!l || l.soldAt || l.sellerId !== t.id) return;
+    if (l.creature) {
+      if (t.team.length < TEAM_MAX) t.team.push(l.creature);
+      else t.box.push(l.creature);
+    } else if (l.itemId) {
+      t.bag[l.itemId] = (t.bag[l.itemId] ?? 0) + (l.qty ?? 1);
+    }
+    this.market.delete(l.id);
+    // devolve primeiro ao treinador, depois apaga a oferta
+    await this.store.save(t).catch(() => this.store.markDirty(t));
+    await this.store.marketDelete(l.id).catch((err) => console.error("[mercado] falha ao apagar oferta:", err));
+    this.sendProfile(client);
+    this.notice(client, "Oferta retirada; voltou para você.");
+    this.handleMarketOpen(client);
+  }
+
+  /** Recebe as Sementes das ofertas vendidas (menos a taxa do Mercado). */
+  private async collectSales(t: Trainer) {
+    const sold = [...this.market.values()].filter((l) => l.sellerId === t.id && l.soldAt);
+    if (!sold.length) return;
+    let total = 0;
+    const lines: string[] = [];
+    for (const l of sold) {
+      const net = l.price - Math.floor(l.price * MARKET_FEE);
+      total += net;
+      const what = l.creature ? getSpecies(l.creature.speciesId).name : `${l.qty}× ${getItem(l.itemId)?.name ?? l.itemId}`;
+      lines.push(`${what} para ${l.buyerName}`);
+      this.market.delete(l.id);
+    }
+    t.money += total;
+    await this.store.save(t).catch(() => this.store.markDirty(t));
+    for (const l of sold) await this.store.marketDelete(l.id).catch((err) => console.error("[mercado] falha ao apagar venda:", err));
+    const entry = [...this.sessions.entries()].find(([, ss]) => ss.trainer.id === t.id);
+    const client = entry ? this.clientOf(entry[0]) : undefined;
+    if (client) {
+      this.sendProfile(client);
+      this.notice(client, `Mercado: você vendeu ${lines.join(", ")} e recebeu ${total} Sementes (taxa de ${Math.round(MARKET_FEE * 100)}%).`);
+    }
   }
 
   // ---------- Ginásios ----------
@@ -811,6 +1190,8 @@ export class WorldRoom extends Room<WorldState> {
     const { dx, dy } = DIRECTION_DELTA[isDirection(player.dir) ? player.dir : "down"];
     const tx = player.x + dx;
     const ty = player.y + dy;
+    const mc = this.state.merchant;
+    if (mc.x && mc.x === tx && mc.y === ty) return this.openMerchant(client, s);
     const obj = objectAt(tx, ty);
     if (obj) this.interactWith(client, s, obj, tx, ty);
   }
@@ -834,6 +1215,8 @@ export class WorldRoom extends Room<WorldState> {
         client.send("tutor_open", {});
       } else {
         const msg: ShopMessage = {
+          shop: "loja",
+          title: "Loja da Vila Broto",
           items: SHOP_ITEMS.map((id) => {
             const it = getItem(id)!;
             return { id, name: it.name, description: it.description, price: it.price ?? 0 };
@@ -847,6 +1230,9 @@ export class WorldRoom extends Room<WorldState> {
     } else if (obj.kind === "gym" && obj.gymId) {
       const gym = getGym(obj.gymId);
       if (gym && ty === obj.y + obj.h - 1) this.sendGymOffer(client, s, gym);
+    } else if (obj.kind === "npc" && obj.npcId) {
+      const npc = getNpc(obj.npcId);
+      if (npc) this.talkTo(client, s, npc);
     } else if (obj.kind === "npc" && obj.gymId) {
       const gym = getGym(obj.gymId)!;
       const has = s.trainer.badges.includes(gym.id);
@@ -866,20 +1252,74 @@ export class WorldRoom extends Room<WorldState> {
   private handleBuy(client: Client, message: unknown) {
     const r = this.ready(client);
     if (!r || r.s.battle) return;
-    const m = message as { itemId?: unknown; qty?: unknown } | null;
+    const m = message as { itemId?: unknown; qty?: unknown; shop?: unknown } | null;
     const item = getItem(m?.itemId);
     const qty = Number(m?.qty);
-    if (!item || item.price === null || !SHOP_ITEMS.includes(item.id)) return;
-    if (!Number.isInteger(qty) || qty < 1 || qty > 99) return;
-    if (!this.nearShop(r.player)) return;
+    if (!item || !Number.isInteger(qty) || qty < 1 || qty > 99) return;
+    // preço vem da loja onde o jogador está (Loja da vila ou Mercador viajante)
+    let unit: number;
+    if (m?.shop === "mercador") {
+      const offer = MERCHANT_STOCK.find((o) => o.itemId === item.id);
+      if (!offer || !this.nearMerchant(r.player)) return;
+      unit = offer.price;
+    } else {
+      if (item.price === null || !SHOP_ITEMS.includes(item.id) || !this.nearShop(r.player)) return;
+      unit = item.price;
+    }
     const t = r.s.trainer;
-    const cost = item.price * qty;
+    const cost = unit * qty;
     if (t.money < cost) return this.notice(client, "Sementes insuficientes.");
     t.money -= cost;
     t.bag[item.id] = (t.bag[item.id] ?? 0) + qty;
     this.store.markDirty(t);
     this.sendProfile(client);
     this.notice(client, `Você comprou ${qty}× ${item.name}.`);
+  }
+
+  /** Vende itens da mochila para a Loja (metade do preço). */
+  private handleSellItem(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r || r.s.battle || r.s.trade) return;
+    if (!this.nearShop(r.player)) return;
+    const m = message as { itemId?: unknown; qty?: unknown } | null;
+    const item = getItem(m?.itemId);
+    const qty = Number(m?.qty);
+    if (!item || !Number.isInteger(qty) || qty < 1 || qty > 99) return;
+    const t = r.s.trainer;
+    const have = t.bag[item.id] ?? 0;
+    const price = itemSellPrice(item.id);
+    if (have < qty || price <= 0) return;
+    t.bag[item.id] = have - qty;
+    if (t.bag[item.id] <= 0) delete t.bag[item.id];
+    t.money += price * qty;
+    this.store.markDirty(t);
+    this.sendProfile(client);
+    this.notice(client, `Você vendeu ${qty}× ${item.name} por ${price * qty} Sementes.`);
+  }
+
+  /** Vende uma criatura da caixa para a Loja (lendários não). */
+  private handleSellCreature(client: Client, message: unknown) {
+    const r = this.ready(client);
+    if (!r || r.s.battle || r.s.trade) return;
+    if (!this.nearShop(r.player)) return;
+    const t = r.s.trainer;
+    const uid = (message as { uid?: unknown } | null)?.uid;
+    const index = t.box.findIndex((c) => c.uid === uid);
+    if (index < 0) return;
+    const c = t.box[index];
+    const price = creatureSellPrice(c);
+    if (price <= 0) return this.notice(client, "A Loja não compra criaturas lendárias. Tente o Mercado.");
+    t.box.splice(index, 1);
+    t.money += price;
+    this.store.markDirty(t);
+    this.sendProfile(client);
+    this.notice(client, `Você vendeu ${getSpecies(c.speciesId).name} (Nv. ${c.level}) por ${price} Sementes.`);
+  }
+
+  /** Perto do Mercador viajante (definido no evento do Mercador). */
+  private nearMerchant(player: Player) {
+    const mc = this.state.merchant;
+    return !!mc.x && Math.abs(player.x - mc.x) + Math.abs(player.y - mc.y) <= 1;
   }
 
   private nearShop(player: Player) {

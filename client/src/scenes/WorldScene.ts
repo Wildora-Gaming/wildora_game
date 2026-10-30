@@ -3,6 +3,7 @@ import { getStateCallbacks, type Room } from "colyseus.js";
 import { MOVE_COOLDOWN_MS, TILE_SIZE, DIRECTION_DELTA, type ChatBroadcast, type Direction } from "../../../shared/constants";
 import { LEGEND_SPOTS, MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH, Tile, isWalkable, isWildTile, tileAt } from "../../../shared/map";
 import { SPECIES } from "../../../shared/battle/data";
+import { MERCHANT } from "../../../shared/npcs";
 import { miniCanvas, nativeCanvas } from "../creature-art";
 import { inputBlocked } from "../ui-state";
 import { openBagPanel, openTeamPanel } from "../panels/panels";
@@ -187,12 +188,15 @@ export class WorldScene extends Phaser.Scene {
     const x = px(o.x);
     const y = py(o.y);
     const shadow = this.add.ellipse(x, y - 1, 12, 4, 0x000000, 0.22).setDepth(y - 1);
-    const sprite = this.add.sprite(x, y, key, frameIndex("down", "stand")).setOrigin(0.5, 1).setDepth(y);
+    const sprite = this.add.sprite(x, y, key, frameIndex(o.face ?? "down", "stand")).setOrigin(0.5, 1).setDepth(y);
+    // cor do nome pelo papel: líder de ginásio (amarelo), missão, troca, mercado, estrada
+    const color = { quest: "#ffb347", swap: "#7fe0d0", market: "#b8f28a", road: "#ffffff" }[o.role as string] ?? "#ffd84a";
+    const tag = { quest: " !", swap: " ⇄", market: " $" }[o.role as string] ?? "";
     const label = this.add
-      .text(x, y - 26, o.name ?? "", {
+      .text(x, y - 26, (o.name ?? "") + tag, {
         fontFamily: '"Wildora Digits", "Pixelify Sans", system-ui, sans-serif',
         fontSize: "14px",
-        color: "#ffd84a",
+        color,
         stroke: "#1f1a24",
         strokeThickness: 4,
       })
@@ -297,7 +301,9 @@ export class WorldScene extends Phaser.Scene {
     const { dx, dy } = DIRECTION_DELTA[dir];
     const nx = m.tx + dx;
     const ny = m.ty + dy;
-    if (isWalkable(nx, ny)) {
+    const mc = (this.room.state as any).merchant;
+    const merchantHere = mc?.x && mc.x === nx && mc.y === ny;
+    if (isWalkable(nx, ny) && !merchantHere) {
       this.sendMove(dir, nx, ny);
       if (this.touchSteps >= 0) this.touchSteps += 1;
       m.idleSince = 0;
@@ -419,6 +425,13 @@ export class WorldScene extends Phaser.Scene {
       this.held = [];
     });
 
+    // Mercador viajante
+    $(this.room.state).listen("merchant", (mc: any) => {
+      if (!mc) return;
+      $(mc).onChange(() => this.syncMerchant(mc));
+      this.syncMerchant(mc);
+    });
+
     // Lendário do evento
     $(this.room.state).listen("legend", (legend: any) => {
       if (!legend) return;
@@ -448,6 +461,9 @@ export class WorldScene extends Phaser.Scene {
       me: this.me ? { x: this.me.tx, y: this.me.ty } : null,
       others,
       legend: l?.speciesId ? { speciesId: l.speciesId, x: l.x, y: l.y } : null,
+      merchant: (this.room.state as any).merchant?.x
+        ? { x: (this.room.state as any).merchant.x, y: (this.room.state as any).merchant.y, region: (this.room.state as any).merchant.region }
+        : null,
     };
   }
 
@@ -456,6 +472,31 @@ export class WorldScene extends Phaser.Scene {
     if (inputBlocked()) return;
     this.held = [];
     openWorldMap(() => this.markers());
+  }
+
+  // ---------- Mercador viajante ----------
+
+  private merchantView: { x: number; y: number; objs: Phaser.GameObjects.GameObject[] } | null = null;
+
+  private syncMerchant(mc: any) {
+    if (this.merchantView && this.merchantView.x === mc.x && this.merchantView.y === mc.y) return;
+    for (const g of this.merchantView?.objs ?? []) g.destroy();
+    this.merchantView = null;
+    if (!mc.x) return;
+    const objs = this.drawNpc({ kind: "npc", x: mc.x, y: mc.y, w: 1, h: 1, variant: 0, look: MERCHANT.look, name: `${MERCHANT.name} $`, role: "market", face: "down" });
+    // barraca: toldo listrado atrás do mercador
+    const x = px(mc.x);
+    const y = py(mc.y);
+    const tent = this.add.graphics().setDepth(y - 8);
+    for (let i = 0; i < 6; i++) {
+      tent.fillStyle(i % 2 ? 0xffffff : 0xe5484d, 1);
+      tent.fillRect(x - 18 + i * 6, y - 34, 6, 7);
+    }
+    tent.fillStyle(0x7a4a24, 1);
+    tent.fillRect(x - 18, y - 27, 2, 18);
+    tent.fillRect(x + 16, y - 27, 2, 18);
+    objs.push(tent);
+    this.merchantView = { x: mc.x, y: mc.y, objs };
   }
 
   // ---------- Lendário ----------

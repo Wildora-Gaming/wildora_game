@@ -115,6 +115,22 @@ async function main() {
   assert.deepEqual(back.badges, ["fera"]);
   ok("treinador, criaturas (time e caixa), mochila, dex e insígnias vão e voltam do banco");
 
+  // progresso (missões etc.) e Mercado
+  back.progress = { quests: { ana: { step: 1, count: 2 } }, npcTrades: ["juca"], roadWins: { estrada_leste: 20000 } };
+  await store.save(back);
+  const reread = (await store.get(sample.id))!;
+  assert.deepEqual(reread.progress, back.progress);
+  const listing = { id: "oferta-1", sellerId: sample.id, sellerName: sample.name, price: 900, createdAt: Date.now(), creature: back.box[0] };
+  await store.marketPut(listing);
+  await store.marketPut({ ...listing, soldAt: Date.now(), buyerName: "Ana" });
+  const all = await store.marketAll();
+  assert.equal(all.length, 1);
+  assert.equal(all[0].buyerName, "Ana");
+  assert.equal(all[0].creature?.speciesId, "rocky");
+  await store.marketDelete("oferta-1");
+  assert.equal((await store.marketAll()).length, 0);
+  ok("progresso de missões e ofertas do Mercado vão e voltam do banco");
+
   // mudanças: soltar a criatura da caixa, gastar itens, nova insígnia
   back.box = [];
   back.bag = { orbi: 1 };

@@ -22,6 +22,33 @@ export interface Trainer {
   lastSeen: number;
   /** versão do mundo em que x/y foram salvos (ver WORLD_VERSION); sem valor = mundo 1 */
   world?: number;
+  /** missões, trocas com NPCs e desafios do dia */
+  progress?: Progress;
+}
+
+export interface Progress {
+  /** missões: etapa atual de cada NPC e contagem da tarefa em andamento */
+  quests?: Record<string, { step: number; count: number }>;
+  /** trocas com NPCs já feitas */
+  npcTrades?: string[];
+  /** treinadores da estrada: dia (desde 1970) da última vitória */
+  roadWins?: Record<string, number>;
+}
+
+/** Oferta no Mercado entre jogadores. */
+export interface Listing {
+  id: string;
+  sellerId: string;
+  sellerName: string;
+  /** criatura ou item à venda */
+  creature?: Creature;
+  itemId?: string;
+  qty?: number;
+  price: number;
+  createdAt: number;
+  /** vendida: comprador e se o vendedor já recebeu as Sementes */
+  buyerName?: string;
+  soldAt?: number;
 }
 
 /**
@@ -57,6 +84,11 @@ export interface Store {
   /** grava tudo que está pendente */
   flush(): Promise<void>;
   close(): Promise<void>;
+  /** Mercado: todas as ofertas (abertas e vendidas ainda não recebidas) */
+  marketAll(): Promise<Listing[]>;
+  /** cria ou atualiza uma oferta */
+  marketPut(l: Listing): Promise<void>;
+  marketDelete(id: string): Promise<void>;
 }
 
 /** Nome sem acento, minúsculo e com espaços normalizados: impede "Ana" e "aná" ao mesmo tempo. */
@@ -84,6 +116,9 @@ export abstract class BatchedStore implements Store {
   abstract insert(t: Trainer): Promise<void>;
   abstract save(t: Trainer): Promise<void>;
   abstract close(): Promise<void>;
+  abstract marketAll(): Promise<Listing[]>;
+  abstract marketPut(l: Listing): Promise<void>;
+  abstract marketDelete(id: string): Promise<void>;
 
   markDirty(t: Trainer) {
     this.dirty.set(t.id, t);

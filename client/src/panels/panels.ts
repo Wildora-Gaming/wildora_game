@@ -10,6 +10,7 @@ import { TYPE_COLOR, TYPE_LABEL } from "../../../shared/battle/types";
 import { STATUS_LABEL } from "../../../shared/battle/data";
 import { TEAM_MAX, type GymOfferMessage, type ProfileMessage, type ShopMessage } from "../../../shared/constants";
 import { GYMS } from "../../../shared/gyms";
+import { creatureSellPrice, itemSellPrice } from "../../../shared/economy";
 import type { CreatureView } from "../../../shared/battle/engine";
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text?: string) {
@@ -228,33 +229,83 @@ export function openBagPanel(room: Room) {
 export function openShop(room: Room, msg: ShopMessage) {
   const body = el("div", "modal-body");
   const qty: Record<string, number> = {};
+  const sellQty: Record<string, number> = {};
+  let tab: "buy" | "sell" = "buy";
+  let confirming: string | null = null; // uid da criatura esperando confirmação de venda
+  const stepper = (store: Record<string, number>, id: string, max: number) => {
+    const n = Math.min(store[id] ?? 1, Math.max(1, max));
+    const box = el("div", "stepper");
+    box.append(
+      btn("−", () => ((store[id] = Math.max(1, n - 1)), render()), "ghost small"),
+      el("span", "qty", String(n)),
+      btn("+", () => ((store[id] = Math.min(max, n + 1)), render()), "ghost small"),
+    );
+    return { box, n };
+  };
   const render = () => {
     const p: ProfileMessage | null = uiState.profile;
     const money = p?.money ?? msg.money;
     body.replaceChildren();
     body.append(el("div", "money-line", `Suas Sementes: ${money}`));
+    if (msg.shop === "loja") {
+      const tabs = el("div", "tabs");
+      tabs.append(
+        btn("Comprar", () => ((tab = "buy"), render()), tab === "buy" ? "tab active" : "tab"),
+        btn("Vender", () => ((tab = "sell"), render()), tab === "sell" ? "tab active" : "tab"),
+      );
+      body.append(tabs);
+    }
     const list = el("div", "i-list");
-    for (const it of msg.items) {
-      const n = qty[it.id] ?? 1;
+    if (tab === "buy") {
+      for (const it of msg.items) {
+        const row = el("div", "i-row");
+        const text = el("div", "i-text");
+        const have = p?.bag[it.id] ?? 0;
+        text.append(el("strong", "", `${it.name} · ${it.price}`), el("span", "", `${it.description} Você tem ${have}.`));
+        const { box, n } = stepper(qty, it.id, 99);
+        const cost = it.price * n;
+        const buy = el("div", "i-buy");
+        buy.append(box, btn(`Comprar (${cost})`, () => room.send("buy", { itemId: it.id, qty: n, shop: msg.shop }), "", cost > money));
+        row.append(itemIcon(it.id, 36), text, buy);
+        list.append(row);
+      }
+      body.append(list);
+      return;
+    }
+    // ---------- vender ----------
+    body.append(el("h3", "shop-sub", "Itens da mochila (metade do preço)"));
+    const bag = Object.entries(p?.bag ?? {}).filter(([id, n]) => n > 0 && itemSellPrice(id) > 0);
+    if (!bag.length) list.append(el("p", "hint", "Nada para vender na mochila."));
+    for (const [id, have] of bag) {
+      const it = getItem(id)!;
+      const price = itemSellPrice(id);
       const row = el("div", "i-row");
       const text = el("div", "i-text");
-      const have = p?.bag[it.id] ?? 0;
-      text.append(el("strong", "", `${it.name} · ${it.price}`), el("span", "", `${it.description} Você tem ${have}.`));
-      const stepper = el("div", "stepper");
-      stepper.append(
-        btn("−", () => ((qty[it.id] = Math.max(1, n - 1)), render()), "ghost small"),
-        el("span", "qty", String(n)),
-        btn("+", () => ((qty[it.id] = Math.min(99, n + 1)), render()), "ghost small"),
-      );
-      const cost = it.price * n;
-      const buy = el("div", "i-buy");
-      buy.append(stepper, btn(`Comprar (${cost})`, () => room.send("buy", { itemId: it.id, qty: n }), "", cost > money));
-      row.append(itemIcon(it.id, 36), text, buy);
+      text.append(el("strong", "", `${it.name} · ${price} cada`), el("span", "", `Você tem ${have}.`));
+      const { box, n } = stepper(sellQty, id, have);
+      const sell = el("div", "i-buy");
+      sell.append(box, btn(`Vender (${price * n})`, () => room.send("sell_item", { itemId: id, qty: n }), "ghost"));
+      row.append(itemIcon(id, 36), text, sell);
       list.append(row);
     }
     body.append(list);
+    body.append(el("h3", "shop-sub", "Criaturas da caixa"));
+    const boxed = p?.box ?? [];
+    if (!boxed.length) body.append(el("p", "hint", "Sua caixa está vazia. Só criaturas da caixa podem ser vendidas (guarde pelo Time → Caixa)."));
+    const clist = el("div", "c-list");
+    for (const c of boxed) {
+      const price = creatureSellPrice(c);
+      const action =
+        price <= 0
+          ? btn("Lendário: só no Mercado", () => {}, "ghost small", true)
+          : confirming === c.uid
+            ? btn(`Confirmar venda (${price})`, () => ((confirming = null), room.send("sell_creature", { uid: c.uid })), "small")
+            : btn(`Vender (${price})`, () => ((confirming = c.uid), render()), "ghost small");
+      clist.append(creatureRow(c, [action], true));
+    }
+    body.append(clist);
   };
-  const m = openModal("shop", "Loja da Vila Broto", body, { wide: true });
+  const m = openModal("shop", msg.title, body, { wide: true });
   m.setRender(render);
   render();
 }

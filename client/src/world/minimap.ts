@@ -13,6 +13,7 @@ export interface MapMarkers {
   me: { x: number; y: number } | null;
   others: { x: number; y: number }[];
   legend: { speciesId: string; x: number; y: number } | null;
+  merchant: { x: number; y: number; region: string } | null;
 }
 
 function shade(hex: string, f: number) {
@@ -103,6 +104,18 @@ function drawStar(ctx: CanvasRenderingContext2D, x: number, y: number, r: number
   ctx.stroke();
 }
 
+function drawCoin(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  ctx.fillStyle = "#f2c53d";
+  ctx.strokeStyle = "#1f2430";
+  ctx.lineWidth = Math.max(1, r / 3);
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#8a5a10";
+  ctx.fillRect(x - r * 0.15, y - r * 0.55, r * 0.3, r * 1.1);
+}
+
 function drawPlayer(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, me: boolean) {
   ctx.fillStyle = me ? "#ffe066" : "#ffffff";
   ctx.strokeStyle = "#1f2430";
@@ -153,6 +166,7 @@ export class Minimap {
     for (const o of healObjects()) drawIcon(ctx, "heal", o, s, ox, oy, 3);
     for (const o of gymObjects()) drawIcon(ctx, "gym", o, s, ox, oy, 4);
     if (m.legend) drawStar(ctx, (m.legend.x + 0.5) * s - ox, (m.legend.y + 0.5) * s - oy, 5);
+    if (m.merchant) drawCoin(ctx, (m.merchant.x + 0.5) * s - ox, (m.merchant.y + 0.5) * s - oy, 4);
     for (const p of m.others) drawPlayer(ctx, (p.x + 0.5) * s - ox, (p.y + 0.5) * s - oy, 2, false);
     drawPlayer(ctx, (m.me.x + 0.5) * s - ox, (m.me.y + 0.5) * s - oy, 3, true);
   }
@@ -300,6 +314,7 @@ export function openWorldMap(getMarkers: () => MapMarkers) {
       ctx.fillText(l.name, pos.x, pos.y);
     }
     if (m.legend) drawStar(ctx, (m.legend.x + 0.5) * s, (m.legend.y + 0.5) * s, 9 * k);
+    if (m.merchant) drawCoin(ctx, (m.merchant.x + 0.5) * s, (m.merchant.y + 0.5) * s, 7 * k);
     for (const p of m.others) drawPlayer(ctx, (p.x + 0.5) * s, (p.y + 0.5) * s, 4 * k, false);
     if (m.me) drawPlayer(ctx, (m.me.x + 0.5) * s, (m.me.y + 0.5) * s, 6 * k, true);
     if (zoomed && first && m.me) {
@@ -316,6 +331,7 @@ export function openWorldMap(getMarkers: () => MapMarkers) {
       return row;
     };
     legendBox.append(item("me", "Você"), item("other", "Outros treinadores"), item("gym", "Ginásio"), item("heal", "Centro / Posto de Cura"));
+    if (m.merchant) legendBox.append(item("coin", `Mercador viajante (${m.merchant.region})`));
     if (m.legend) legendBox.append(item("star", `Lendário: ${SPECIES[m.legend.speciesId]?.name ?? ""} (${LEGEND_SPOTS[m.legend.speciesId]?.region ?? ""})`));
   };
   requestAnimationFrame(draw);

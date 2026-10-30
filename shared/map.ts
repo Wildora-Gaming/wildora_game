@@ -1,5 +1,7 @@
 import { GYMS } from "./gyms";
 import { TYPE_IDS } from "./battle/types";
+import { NPCS } from "./npcs";
+import type { Direction } from "./constants";
 // Mundo de Wildora (versão 2): 256×192 tiles com a Vila Broto no centro.
 // Gerado por código de forma determinística: cliente e servidor chegam ao mesmo mundo.
 // Oito biomas com bordas irregulares que se misturam aos poucos, estradas sinuosas ligando a vila
@@ -42,8 +44,12 @@ export interface MapObject {
   h: number;
   /** variação visual (cor do telhado etc.) */
   variant: number;
-  /** função especial: Centro de Cura, Loja */
-  role?: "heal" | "shop" | "gym" | "tutor";
+  /** função especial: Centro de Cura, Loja, ou o papel do NPC */
+  role?: "heal" | "shop" | "gym" | "tutor" | "market" | "swap" | "quest" | "road";
+  /** NPC do mundo (ver shared/npcs.ts) */
+  npcId?: string;
+  /** para onde o NPC olha */
+  face?: Direction;
   /** ginásio deste prédio ou deste líder */
   gymId?: string;
   /** NPC: aparência e nome */
@@ -336,7 +342,7 @@ function buildWorld() {
     const t = get(x, y);
     if (t === Tile.Water || t === Tile.Lava) return Infinity;
     if (blocked[y * W + x]) return Infinity;
-    if (t === Tile.Path) return 0.6;
+    if (t === Tile.Path) return 1.5; // sem desconto: cada ligação abre o próprio caminho
     return 1 + noise(x, y, 11, 55) * 9 + noise(x, y, 4, 56) * 2 + (t === Tile.Ice ? 3 : 0);
   };
   const road = (from: { x: number; y: number }, to: { x: number; y: number }) => {
@@ -496,6 +502,20 @@ function buildWorld() {
 
   for (let i = 0; i < W * H; i++) if (ground[i] === Tile.Water || ground[i] === Tile.Lava) blocked[i] = true;
   blocked[SPAWN.y * W + SPAWN.x] = false;
+
+  // ---------- 10. Personagens (por último: não mudam o resto do mundo) ----------
+  for (const n of NPCS) {
+    // tira o que estiver no lugar (um arbusto, uma árvore)
+    for (let k = objects.length - 1; k >= 0; k--) {
+      const o = objects[k];
+      if (n.x >= o.x && n.x < o.x + o.w && n.y >= o.y && n.y < o.y + o.h) {
+        objects.splice(k, 1);
+        for (let j = o.y; j < o.y + o.h; j++) for (let i = o.x; i < o.x + o.w; i++) blocked[j * W + i] = false;
+      }
+    }
+    objects.push({ kind: "npc", x: n.x, y: n.y, w: 1, h: 1, variant: 0, look: n.look, name: n.name, npcId: n.id, role: n.role, face: n.face });
+    blocked[n.y * W + n.x] = true;
+  }
 
   // índice de objetos por tile (para objectAt ser rápido)
   const objAt = new Int32Array(W * H).fill(-1);

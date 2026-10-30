@@ -98,7 +98,18 @@ com `?toque=1` no endereço.
   (até o nível atual, inclusive os esquecidos) são de graça; golpes do tipo da criatura e Mordida
   Firme/Golpe Bruto custam Sementes e pedem nível mínimo pela força do golpe.
 - **Golpe básico próprio de cada criatura** (Patada, Arranhão, Rabada, Mordiscada, Coice...).
-- **Centro de Cura**, **Loja** (Orbis e Poções) e **Sementes** ganhas em batalha.
+- **Centro de Cura**, **Loja** (compra Orbis e Poções; vende itens pela metade do preço e criaturas da
+  caixa por Sementes, menos lendários) e **Sementes** ganhas em batalha.
+- **A criatura líder do time anda atrás do treinador**, e todos veem.
+- **Mercado entre jogadores** (Corretora Lívia, na praça da Vila Broto): anuncie criaturas e itens pelo
+  preço que quiser; quem comprar recebe na hora e você recebe as Sementes (menos 5%) na hora ou quando
+  entrar de novo. Dá para retirar a oferta.
+- **Personagens pelo mundo**: quem troca criaturas (uma vez cada; a nova vem no mesmo nível), quem dá
+  missões em sequência (capturar, vencer, derrotar treinadores) com Sementes e itens de recompensa, e
+  9 treinadores na estrada que desafiam quem passa perto (vencidos, só no dia seguinte).
+- **Mercador viajante**: muda de lugar a cada 30 minutos (aviso no chat e moeda no mapa) e vende itens
+  raros: Orbi Ouro, Hiper Poção e Doce Estelar mais barato.
+- **XP triplicado** em todas as batalhas.
 - **Ciclo dia/noite** (20 min, 6 de noite): à noite aparecem Shado e Batto.
 - Multiplayer em tempo real com chat; quem está em batalha mostra um "!".
 - Derrota: volta ao Centro de Cura com o time recuperado e perde 10% das Sementes.

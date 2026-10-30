@@ -19,7 +19,8 @@ create table if not exists public.trainers (
   wins        integer not null default 0,
   caught      integer not null default 0,
   created_at  timestamptz not null default now(),
-  last_seen   timestamptz not null default now()
+  last_seen   timestamptz not null default now(),
+  progress    jsonb not null default '{}'::jsonb
 );
 create unique index if not exists trainers_name_key on public.trainers (name_key);
 
@@ -69,11 +70,23 @@ create table if not exists public.badges (
 );
 
 -- Regras de acesso: cada jogador só lê o que é dele
+-- Mercado entre jogadores: cada oferta guardada inteira (criatura ou item, preço, comprador)
+create table if not exists public.market (
+  id         text primary key,
+  seller_id  uuid not null references public.trainers (id) on delete cascade,
+  data       jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+-- bancos criados antes: colunas novas
+alter table public.trainers add column if not exists progress jsonb not null default '{}'::jsonb;
+
 alter table public.trainers  enable row level security;
 alter table public.creatures enable row level security;
 alter table public.inventory enable row level security;
 alter table public.dex       enable row level security;
 alter table public.badges    enable row level security;
+alter table public.market    enable row level security;
 
 do $$
 begin

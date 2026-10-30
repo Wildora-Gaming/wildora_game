@@ -126,3 +126,15 @@
 /* celular: mapa ampliado com rolagem */
 .world-map-canvas.zoomed { overflow: auto; max-height: calc(100dvh - 230px); touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
 .world-map-canvas.zoomed canvas { max-width: none; max-height: none; object-fit: fill; }
+.shop-sub { margin: 6px 0 0; font-size: 16px; text-transform: uppercase; color: #3a4152; }
+
+.wm-key.coin { background: #f2c53d; border-radius: 50%; }
+/* Mercado e trocas */
+.small-tabs .pbtn { font-size: 13px; }
+.market .seller { font-family: system-ui, sans-serif; font-size: 12px; color: #5b6272; }
+.market-form { display: grid; gap: 10px; }
+.price-line { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-weight: 700; }
+.price-input { width: 140px; font: 700 18px var(--pixel); padding: 6px 10px; border: 2px solid #1f2430; border-radius: 8px; }
+.swap-deal { display: flex; align-items: center; justify-content: center; gap: 16px; }
+.swap-side { display: grid; justify-items: center; gap: 4px; }
+.swap-arrow { font-size: 28px; font-weight: 700; }

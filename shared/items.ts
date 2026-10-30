@@ -40,6 +40,14 @@ export const ITEMS: Record<string, ItemDef> = {
     price: 450,
     power: 60,
   },
+  hiper_pocao: {
+    id: "hiper_pocao",
+    name: "Hiper Poção",
+    kind: "heal",
+    description: "Recupera 200 de Vida. Só com o Mercador viajante.",
+    price: null,
+    power: 200,
+  },
   doce_estelar: {
     id: "doce_estelar",
     name: "Doce Estelar",

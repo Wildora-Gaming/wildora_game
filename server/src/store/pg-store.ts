@@ -3,7 +3,7 @@
 import type { Creature } from "../../../shared/battle/engine";
 import type { StatusId } from "../../../shared/battle/data";
 import type { Db } from "./db";
-import { BatchedStore, NameTakenError, decodeX, encodeX, nameKey, type Trainer } from "./types";
+import { BatchedStore, NameTakenError, decodeX, encodeX, nameKey, type Listing, type Progress, type Trainer } from "./types";
 
 interface TrainerRow {
   id: string;
@@ -17,6 +17,7 @@ interface TrainerRow {
   caught: number;
   created_at: Date | string;
   last_seen: Date | string;
+  progress?: Progress | string | null;
 }
 
 interface CreatureRow {
@@ -48,14 +49,48 @@ export class PgStore extends BatchedStore {
   /**
    * Ajustes no esquema de bancos criados antes (rodam a cada início e podem repetir).
    * - criaturas: nível até 150 (lendários).
+   * - treinadores: coluna progress (missões, trocas com NPCs, desafios do dia).
+   * - tabela market (Mercado entre jogadores).
    */
   async migrate() {
-    try {
-      await this.db.query(`alter table public.creatures drop constraint if exists creatures_level_check`);
-      await this.db.query(`alter table public.creatures add constraint creatures_level_check check (level between 1 and 150)`);
-    } catch (err) {
-      console.error("[store] não consegui atualizar o limite de nível no banco (rode supabase/schema.sql):", err);
+    const steps = [
+      `alter table public.creatures drop constraint if exists creatures_level_check`,
+      `alter table public.creatures add constraint creatures_level_check check (level between 1 and 150)`,
+      `alter table public.trainers add column if not exists progress jsonb not null default '{}'::jsonb`,
+      `create table if not exists public.market (
+         id         text primary key,
+         seller_id  uuid not null references public.trainers (id) on delete cascade,
+         data       jsonb not null,
+         created_at timestamptz not null default now()
+       )`,
+      `alter table public.market enable row level security`,
+    ];
+    for (const sql of steps) {
+      try {
+        await this.db.query(sql);
+      } catch (err) {
+        console.error("[store] não consegui atualizar o banco (rode supabase/schema.sql):", sql.split("\n")[0], err);
+      }
     }
+  }
+
+  // ---------- Mercado ----------
+
+  async marketAll(): Promise<Listing[]> {
+    const r = await this.db.query<{ data: Listing | string }>("select data from public.market order by created_at");
+    return r.rows.map((row) => (typeof row.data === "string" ? JSON.parse(row.data) : row.data));
+  }
+
+  async marketPut(l: Listing) {
+    await this.db.query(
+      `insert into public.market (id, seller_id, data, created_at) values ($1, $2, $3::jsonb, $4)
+       on conflict (id) do update set data = excluded.data`,
+      [l.id, l.sellerId, JSON.stringify(l), iso(l.createdAt)],
+    );
+  }
+
+  async marketDelete(id: string) {
+    await this.db.query("delete from public.market where id = $1", [id]);
   }
 
   async count() {
@@ -114,6 +149,7 @@ export class PgStore extends BatchedStore {
       badges: badges.rows.map((b) => b.gym_id),
       createdAt: time(row.created_at),
       lastSeen: time(row.last_seen),
+      progress: typeof row.progress === "string" ? JSON.parse(row.progress) : (row.progress ?? {}),
     };
   }
 
@@ -121,9 +157,9 @@ export class PgStore extends BatchedStore {
     try {
       await this.db.transaction(async (tx) => {
         await tx.query(
-          `insert into public.trainers (id, name, name_key, look, x, y, dir, money, wins, caught, created_at, last_seen)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-          [t.id, t.name, nameKey(t.name), t.look, encodeX(t), t.y, t.dir, t.money, t.stats.wins, t.stats.caught, iso(t.createdAt), iso(t.lastSeen)],
+          `insert into public.trainers (id, name, name_key, look, x, y, dir, money, wins, caught, created_at, last_seen, progress)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)`,
+          [t.id, t.name, nameKey(t.name), t.look, encodeX(t), t.y, t.dir, t.money, t.stats.wins, t.stats.caught, iso(t.createdAt), iso(t.lastSeen), JSON.stringify(t.progress ?? {})],
         );
         await this.writeDetails(tx, t);
       });
@@ -136,9 +172,9 @@ export class PgStore extends BatchedStore {
   async save(t: Trainer) {
     await this.db.transaction(async (tx) => {
       await tx.query(
-        `update public.trainers set look=$2, x=$3, y=$4, dir=$5, money=$6, wins=$7, caught=$8, last_seen=$9
+        `update public.trainers set look=$2, x=$3, y=$4, dir=$5, money=$6, wins=$7, caught=$8, last_seen=$9, progress=$10::jsonb
          where id=$1`,
-        [t.id, t.look, encodeX(t), t.y, t.dir, t.money, t.stats.wins, t.stats.caught, iso(t.lastSeen)],
+        [t.id, t.look, encodeX(t), t.y, t.dir, t.money, t.stats.wins, t.stats.caught, iso(t.lastSeen), JSON.stringify(t.progress ?? {})],
       );
       await this.writeDetails(tx, t);
     });
