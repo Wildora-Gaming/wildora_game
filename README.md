@@ -59,12 +59,14 @@ com `?toque=1` no endereço.
 - **Criador de personagem** com prévia ao vivo: pele, 7 cabelos, 4 olhos, 4 roupas, 3 partes de
   baixo, 3 chapéus e paletas de cor. Os outros jogadores veem o seu visual.
 - **Nível máximo 100** (lendários até 150).
-- **3 iniciais** (Leafin, Flambo, Aquari) e **89 criaturas** em 43 linhas evolutivas, incluindo
-  4 lendários.
+- **3 iniciais** (Leafin, Flambo, Aquari) e **109 criaturas** em 43 linhas evolutivas, incluindo
+  4 lendários. As criaturas do começo (Pawly, Zebri, Chirpy, Fluffi, Sprouty, Batto, Shado, Woolly,
+  Baleo e Shroomy) evoluem nos níveis 16 e 32.
 - **Mundo 256×192** com a Vila Broto no centro e 8 biomas grandes, com bordas irregulares que se
   misturam aos poucos: Campina Norte, Campos do Leste, Pradaria Sul e Orla do Bosque perto da vila
   (níveis 2 a 10), e mais longe Planície Gelada, Bosque Encantado, Encosta Vulcânica e Costa dos
-  Recifes (níveis 12 a 26). Cada bioma tem chão, grama alta e vegetação próprios; estradas sinuosas
+  Recifes (a partir do nível 12). Quanto mais longe da vila, mais fortes e evoluídas as criaturas: no
+  fundo dos biomas distantes chegam ao nível 70–80. O HUD mostra a faixa de nível de onde você está. Cada bioma tem chão, grama alta e vegetação próprios; estradas sinuosas
   ligam a vila aos ginásios. **Minimapa** no canto e **mapa grande** (tecla M, botão Mapa ou toque no
   minimapa) com regiões, ginásios, Centros de Cura, jogadores e o lendário da vez.
 - **Evento dos lendários**: a cada 2 a 3 horas um lendário (Solvaris, Nocteon, Terralith ou

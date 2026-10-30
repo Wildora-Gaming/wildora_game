@@ -1,7 +1,7 @@
 // Ginásios: um de cada tipo, cada um com dois treinadores e o líder.
 // O desafio é em sequência, sem curar entre as lutas. Vencer o líder dá a insígnia.
 import type { TypeId } from "./battle/types";
-import { SPECIES } from "./battle/data";
+import { evolvedAt } from "./battle/data";
 
 export interface GymTrainer {
   name: string;
@@ -39,13 +39,6 @@ const leader = (name: string, look: string, team: [string, number][]): GymTraine
   ...t(name, "Líder", look, team, 0.85),
   reward: 100 * Math.max(...team.map(([, lvl]) => lvl)),
 });
-
-/** Forma que a espécie teria nesse nível (segue as evoluções). */
-function evolvedAt(speciesId: string, level: number): string {
-  let id = speciesId;
-  for (let evo = SPECIES[id]?.evolvesTo; evo && level >= evo.level; evo = SPECIES[id]?.evolvesTo) id = evo.species;
-  return id;
-}
 
 /**
  * Nível de cada ginásio: dois para quem está começando e os outros de 50 a 100.

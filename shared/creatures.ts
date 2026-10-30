@@ -1,4 +1,5 @@
 import { biomeAt, inVillage, nearLake } from "./map";
+import { evolvedAt } from "./battle/data";
 // Criaturas selvagens por zona. Cada campina de grama alta pertence a uma zona.
 
 export interface WildEntry {
@@ -81,6 +82,36 @@ export const ZONES: Record<string, Zone> = {
 /** Zona da grama alta numa posição do mapa (o bioma daquele tile). */
 export function zoneAt(x: number, y: number): Zone {
   return ZONES[biomeAt(x, y).id] ?? ZONES.campina;
+}
+
+// ---------------- Áreas de nível alto ----------------
+// Quanto mais longe da Vila Broto, mais fortes as criaturas: a partir de DEEP_START tiles do centro,
+// o nível sobe DEEP_RATE por tile (o fundo dos biomas distantes chega perto do nível 80), e elas
+// aparecem já evoluídas.
+const CENTER = { x: 128, y: 100 };
+const DEEP_START = 70;
+const DEEP_RATE = 0.75;
+
+export function levelBonus(x: number, y: number): number {
+  const d = Math.hypot(x - CENTER.x, (y - CENTER.y) * 1.15);
+  return d <= DEEP_START ? 0 : Math.round((d - DEEP_START) * DEEP_RATE);
+}
+
+/** Faixa de nível das criaturas selvagens num ponto (para mostrar no HUD). */
+export function wildLevels(x: number, y: number): [number, number] {
+  const z = zoneAt(x, y);
+  const b = levelBonus(x, y);
+  const min = Math.min(...z.table.map((e) => e.minLevel));
+  const max = Math.max(...z.table.map((e) => e.maxLevel));
+  return [Math.min(100, min + b), Math.min(100, max + b)];
+}
+
+/** Sorteia o encontro naquele ponto do mapa: zona, bônus de nível pela distância e forma evoluída. */
+export function rollWildAt(x: number, y: number, rng: () => number = Math.random, isNight = false) {
+  const zone = zoneAt(x, y);
+  const { entry, level } = rollWild(zone.table, rng, isNight);
+  const lvl = Math.min(100, level + levelBonus(x, y));
+  return { zone, entry, level: lvl, speciesId: evolvedAt(entry.speciesId, lvl) };
 }
 
 /** Nome da região para mostrar ao jogador. */

@@ -52,7 +52,7 @@ import {
   type PvpState,
 } from "../../../shared/battle/pvp";
 import { HEAL_POINT, LEGEND_SPOTS, SPAWN, WORLD_VERSION, doorOf, isWalkable, isWildTile, objectAt, tileAt } from "../../../shared/map";
-import { areaName, rollWild, zoneAt } from "../../../shared/creatures";
+import { areaName, rollWildAt } from "../../../shared/creatures";
 import { getGym, gymStages, type Gym } from "../../../shared/gyms";
 import { tutorOption } from "../../../shared/tutor";
 import {
@@ -536,9 +536,8 @@ export class WorldRoom extends Room<WorldState> {
     }
 
     if (isWildTile(tileAt(nx, ny)) && this.rng() < ENCOUNTER_CHANCE) {
-      const zone = zoneAt(nx, ny);
-      const { entry, level } = rollWild(zone.table, this.rng, this.state.night);
-      this.beginWildBattle(client, player, s, createCreature(entry.speciesId, level), zone.name);
+      const { zone, speciesId, level } = rollWildAt(nx, ny, this.rng, this.state.night);
+      this.beginWildBattle(client, player, s, createCreature(speciesId, level), zone.name);
     }
   }
 

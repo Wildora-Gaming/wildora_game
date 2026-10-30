@@ -7,7 +7,7 @@ import { MERCHANT } from "../../../shared/npcs";
 import { miniCanvas, nativeCanvas } from "../creature-art";
 import { inputBlocked } from "../ui-state";
 import { openBagPanel, openTeamPanel } from "../panels/panels";
-import { areaName } from "../../../shared/creatures";
+import { areaName, wildLevels } from "../../../shared/creatures";
 import { grassOverlay, objectArt, objectKey, renderGroundChunk } from "../world/art";
 import { ensureAvatar, frameIndex } from "../avatar/sheet";
 import { toast } from "../toast";
@@ -592,15 +592,23 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  private areaLabel = "";
+
   private updateArea(x: number, y: number) {
     const name = areaName(x, y);
+    // nível das criaturas selvagens daqui (sobe quanto mais longe da vila)
+    const [lo, hi] = wildLevels(x, y);
+    const label = name === "Vila Broto" ? name : `${name} · Nv. ${lo}–${hi}`;
+    if (label !== this.areaLabel) {
+      this.areaLabel = label;
+      const hud = document.getElementById("hud-area");
+      if (hud) hud.textContent = label;
+    }
     if (name === this.area) return;
     sound.setArea(name);
     const first = this.area === "";
     this.area = name;
-    const hud = document.getElementById("hud-area");
-    if (hud) hud.textContent = name;
-    if (!first) toast(name, 1800);
+    if (!first) toast(label, 1800);
   }
 
   /** Textura das moitas na frente das pernas, na cor da grama alta daquele bioma. */

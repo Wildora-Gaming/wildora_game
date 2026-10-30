@@ -144,6 +144,10 @@ export const MOVES = {
   // Espectro
   lamento: move("lamento", "Lamento", "espectro", 35, 100, { effect: { status: "assustado", chance: 0.3 } }),
   assombro: move("assombro", "Assombro", "espectro", 65, 100, { effect: { status: "assustado", chance: 0.2 } }),
+  // evoluções das criaturas fracas (folha 4)
+  garra_espectral: move("garra_espectral", "Garra Espectral", "espectro", 75, 95),
+  pesadelo: move("pesadelo", "Pesadelo", "espectro", 90, 85, { effect: { status: "assustado", chance: 0.3 } }),
+  furia_selvagem: move("furia_selvagem", "Fúria Selvagem", "fera", 90, 85),
 } satisfies Record<string, MoveDef>;
 
 export type MoveId = keyof typeof MOVES;
@@ -240,26 +244,16 @@ export const SPECIES: Record<string, SpeciesDef> = {
   aquarion: species("aquarion", "Aquarion", ["mare"], [88, 82, 82, 78], 236, 0.05, AQUARI_MOVES),
 
   // Campina
-  pawly: species("pawly", "Pawly", ["fera"], [45, 45, 40, 50], 50, 0.6, [[1, "mordiscada"], [6, "mordida_firme"], [14, "presa_toxica"], [22, "golpe_bruto"]]),
-  chirpy: species("chirpy", "Chirpy", ["vento"], [38, 45, 32, 65], 50, 0.6, [[1, "bicada"], [3, "rasante"], [16, "vendaval"]]),
   rocky: species("rocky", "Rocky", ["pedra"], [45, 40, 70, 20], 56, 0.5, ROCKY_MOVES, { species: "rockor", level: 18 }),
   rockor: species("rockor", "Rockor", ["pedra"], [62, 55, 92, 28], 130, 0.2, ROCKY_MOVES, { species: "rockolos", level: 36 }),
   rockolos: species("rockolos", "Rockolos", ["pedra"], [85, 75, 115, 35], 220, 0.05, ROCKY_MOVES),
   zappi: species("zappi", "Zappi", ["faisca"], [35, 50, 30, 60], 56, 0.45, ZAPPI_MOVES, { species: "zapix", level: 18 }),
   zapix: species("zapix", "Zapix", ["faisca"], [50, 68, 42, 80], 130, 0.2, ZAPPI_MOVES, { species: "zaptor", level: 36 }),
   zaptor: species("zaptor", "Zaptor", ["faisca"], [68, 90, 58, 100], 220, 0.05, ZAPPI_MOVES),
-  shado: species("shado", "Shado", ["espectro", "brasa"], [40, 55, 40, 55], 90, 0.15, [[1, "lamento"], [4, "fagulha"], [16, "assombro"], [24, "labareda"]]),
 
   // Bosque
-  sprouty: species("sprouty", "Sprouty", ["flora"], [50, 42, 55, 35], 54, 0.55, [[1, "raiz_rasteira"], [3, "chicote_de_rama"], [9, "esporos"], [18, "folha_navalha"]]),
-  shroomy: species("shroomy", "Shroomy", ["flora", "pedra"], [55, 48, 62, 25], 62, 0.45, [[1, "cabecada_de_chapeu"], [1, "esporos"], [10, "rolagem_de_casco"], [20, "folha_navalha"]]),
-  batto: species("batto", "Batto", ["espectro", "vento"], [42, 50, 38, 66], 70, 0.35, [[1, "rasante"], [5, "lamento"], [15, "assombro"], [22, "vendaval"]]),
 
   // Campos do leste e do lago
-  woolly: species("woolly", "Woolly", ["faisca"], [58, 40, 58, 38], 60, 0.5, [[1, "rolada_de_la"], [4, "onda_estatica"], [8, "choque_piscante"], [20, "descarga"]]),
-  zebri: species("zebri", "Zebri", ["fera"], [50, 58, 42, 64], 62, 0.45, [[1, "coice"], [6, "galope"], [12, "listras_hipnoticas"], [18, "pisoteio"]]),
-  fluffi: species("fluffi", "Fluffi", ["vento"], [48, 42, 48, 56], 58, 0.5, [[1, "sopro_leve"], [5, "rasante"], [18, "vendaval"]]),
-  baleo: species("baleo", "Baleo", ["mare"], [85, 50, 52, 28], 90, 0.3, [[1, "barrigada"], [1, "jato_dagua"], [15, "onda"], [25, "golpe_bruto"]]),
 
   // ---------------- Regiões novas (folhas 2 e 3) ----------------
   ...linha2("terravin", "Terravin", ["pedra"], "terravor", "Terravor", ["pedra", "flora"], [60, 50, 70, 30], ["casco_rasteiro", "chicote_de_rama", "rolagem_de_casco", "polen_sonolento", "pedregulho", "terremoto"]),
@@ -275,6 +269,17 @@ export const SPECIES: Record<string, SpeciesDef> = {
   ...linha2("marinor", "Marinor", ["mare"], "marinox", "Marinox", ["mare", "pedra"], [65, 48, 70, 28], ["batida_de_casco", "jato_dagua", "rolagem_de_casco", "bolhas", "onda", "maremoto"]),
   ...linha2("voltuga", "Voltuga", ["faisca"], "voltugon", "Voltugon", ["faisca"], [50, 60, 55, 45], ["espinho_eletrico", "choque_piscante", "ferrao_toxico", "onda_estatica", "descarga", "trovao"]),
 
+  // Criaturas do começo: agora com duas evoluções (folha 4), nos níveis 16 e 32
+  ...linha3(["pawly", "lupaw", "lobravo"], ["Pawly", "Lupaw", "Lobravo"], ["fera"], ["fera"], [45, 45, 40, 50], ["mordiscada", "mordida_firme", "presa_toxica", "pisoteio", "golpe_bruto", "furia_selvagem"]),
+  ...linha3(["zebri", "zebrino", "zebrovolt"], ["Zebri", "Zebrino", "Zebrovolt"], ["fera"], ["fera", "faisca"], [50, 58, 42, 64], ["coice", "galope", "listras_hipnoticas", "choque_piscante", "descarga", "trovao"]),
+  ...linha3(["chirpy", "plumaro", "celestavo"], ["Chirpy", "Plumaro", "Celestavo"], ["vento"], ["vento"], [38, 45, 32, 65], ["bicada", "rasante", "mordida_firme", "vendaval", "golpe_bruto", "furacao"]),
+  ...linha3(["fluffi", "algodina", "nuvelora"], ["Fluffi", "Algodina", "Nuvelora"], ["vento"], ["luz", "vento"], [48, 42, 48, 56], ["sopro_leve", "rasante", "lampejo", "vendaval", "raio_de_luz", "furacao"]),
+  ...linha3(["sprouty", "sproutal", "bosquerra"], ["Sprouty", "Sproutal", "Bosquerra"], ["flora"], ["flora"], [50, 42, 55, 35], ["raiz_rasteira", "chicote_de_rama", "esporos", "folha_navalha", "golpe_bruto", "tempestade_de_folhas"]),
+  ...linha3(["batto", "battor", "noctubat"], ["Batto", "Battor", "Noctubat"], ["espectro", "vento"], ["sombrio", "vento"], [42, 50, 38, 66], ["rasante", "lamento", "assombro", "vendaval", "mordida_sombria", "golpe_das_trevas"]),
+  ...linha3(["shado", "sombrix", "espectrigre"], ["Shado", "Sombrix", "Espectrigre"], ["espectro"], ["espectro", "sombrio"], [40, 55, 40, 55], ["lamento", "fagulha", "assombro", "garra_espectral", "golpe_das_trevas", "pesadelo"]),
+  ...linha3(["woolly", "lanoso", "rochala"], ["Woolly", "Lanoso", "Rochalã"], ["faisca"], ["faisca", "pedra"], [58, 40, 58, 38], ["rolada_de_la", "onda_estatica", "choque_piscante", "descarga", "pedregulho", "terremoto"]),
+  ...linha3(["baleo", "baleon", "coralossa"], ["Baleo", "Baleon", "Coralossa"], ["mare"], ["mare"], [85, 50, 52, 28], ["barrigada", "jato_dagua", "bolhas", "onda", "golpe_bruto", "maremoto"]),
+  ...linha3(["shroomy", "fungrelo", "micelius"], ["Shroomy", "Fungrelo", "Micelius"], ["flora", "pedra"], ["flora", "veneno"], [55, 48, 62, 25], ["cabecada_de_chapeu", "esporos", "rolagem_de_casco", "folha_navalha", "lodo_acido", "tempestade_de_folhas"]),
   ...linha3(["zephyl", "zephiro", "zephyrax"], ["Zephyl", "Zephiro", "Zephyrax"], ["vento"], ["vento"], [44, 48, 40, 62], ["brisa_cortante", "rasante", "estilhaco", "vendaval", "furacao"]),
   ...linha3(["mosseroo", "musgaroo", "musgalor"], ["Mosseroo", "Musgaroo", "Musgalor"], ["flora"], ["flora"], [55, 45, 58, 30], ["abraco_de_musgo", "chicote_de_rama", "esporos", "mordida_firme", "folha_navalha", "tempestade_de_folhas"]),
   ...linha3(["bubblit", "bubbelle", "bubbelora"], ["Bubblit", "Bubbelle", "Bubbelora"], ["mare"], ["mare", "psiquico"], [48, 42, 46, 50], ["bolhinha", "bolhas", "hipnose", "pulso_mental", "onda", "onda_psiquica"]),
@@ -295,7 +300,23 @@ export const SPECIES: Record<string, SpeciesDef> = {
   terralith: species("terralith", "Terralith", ["pedra"], [115, 110, 120, 50], 320, 0.03, [[1, "golpe_bruto"], [1, "pedregulho"], [1, "terremoto"], [45, "punho_colossal"]]),
 };
 
+/** Formas iniciais da folha 4 mantêm a facilidade de captura e o XP de antes. */
+for (const [id, xp, rate] of [
+  ["pawly", 50, 0.6], ["zebri", 62, 0.45], ["chirpy", 50, 0.6], ["fluffi", 58, 0.5], ["sprouty", 54, 0.55],
+  ["batto", 70, 0.35], ["shado", 90, 0.15], ["woolly", 60, 0.5], ["baleo", 90, 0.3], ["shroomy", 62, 0.45],
+] as const) {
+  SPECIES[id].baseXp = xp;
+  SPECIES[id].catchRate = rate;
+}
+
 export type SpeciesId = string;
+
+/** Forma que a espécie teria nesse nível (segue as evoluções). */
+export function evolvedAt(speciesId: string, level: number): string {
+  let id = speciesId;
+  for (let evo = SPECIES[id]?.evolvesTo; evo && level >= evo.level; evo = SPECIES[id]?.evolvesTo) id = evo.species;
+  return id;
+}
 
 export const STARTERS: SpeciesId[] = ["leafin", "flambo", "aquari"];
 export const STARTER_LEVEL = 5;

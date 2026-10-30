@@ -49,6 +49,14 @@ for _sid in ["zephyl", "zephiro", "zephyrax", "mosseroo", "musgaroo", "musgalor"
              "frostarok", "tangleo", "tanglora", "tanglodon", "slitheria", "slitherion", "slitheragon", "ironclad",
              "ironback", "ironfort"]:
     TUNING[_sid] = {"factor": 1.9, "colors": 11}
+# Folha 4: evoluções das criaturas fracas (desenhos grandes)
+for _sid in ["pawly", "zebri", "chirpy", "fluffi", "sprouty", "batto", "shado", "woolly", "baleo", "shroomy"]:
+    TUNING[_sid] = {"factor": 2.4, "colors": 11}
+for _sid in ["lupaw", "zebrino", "plumaro", "algodina", "sproutal", "battor", "sombrix", "lanoso", "baleon", "fungrelo"]:
+    TUNING[_sid] = {"factor": 2.8, "colors": 12}
+for _sid in ["lobravo", "zebrovolt", "celestavo", "nuvelora", "bosquerra", "noctubat", "espectrigre", "rochala",
+             "coralossa", "micelius"]:
+    TUNING[_sid] = {"factor": 3.2, "colors": 13}
 # Lendários
 for _sid in ["solvaris", "nocteon", "abyssion", "terralith"]:
     TUNING[_sid] = {"factor": 1.85, "colors": 14}
