@@ -69,7 +69,7 @@ com `?toque=1` no endereço.
   minimapa) com regiões, ginásios, Centros de Cura, jogadores e o lendário da vez.
 - **Evento dos lendários**: a cada 2 a 3 horas um lendário (Solvaris, Nocteon, Terralith ou
   Abyssion) aparece na clareira do seu bioma por 15 minutos, com aviso no chat. O primeiro a chegar
-  enfrenta (nível 45 a 50, difícil de capturar); quem chega depois espera a vez. Fugir deixa ele
+  enfrenta (nível 60 a 80, difícil de capturar); quem chega depois espera a vez. Fugir deixa ele
   livre para o próximo, com o dano que levou. Capturado ou vencido, some até o próximo evento.
 - **Batalha por turnos** decidida no servidor: 13 tipos (Veneno, Gelo, Luz, Psíquico e Sombrio
   são os novos; cada tipo é fraco contra exatamente 2), mesmo tipo ×1,5, críticos, precisão,

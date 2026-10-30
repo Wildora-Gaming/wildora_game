@@ -109,7 +109,7 @@ async function main() {
   assert.equal(legend.y, spot.y);
   ok("lendário aparece na clareira do bioma, com aviso no chat para todos");
 
-  // chega no lendário: batalha selvagem nível 45-50
+  // chega no lendário: batalha selvagem nível 60-80
   const pa = world.state.players.get(a.room.sessionId)!;
   pa.x = spot.x - 1;
   pa.y = spot.y;
@@ -117,7 +117,7 @@ async function main() {
   await waitFor(() => a.inbox.battle_start.length === 1, "batalha com o lendário");
   const start = a.inbox.battle_start[0];
   assert.equal(start.foe.speciesId, "solvaris");
-  assert.ok(start.foe.level >= 45 && start.foe.level <= 50);
+  assert.ok(start.foe.level >= 60 && start.foe.level <= 80);
   await waitFor(() => legend.busy === true, "ocupado");
 
   // segundo jogador espera a vez

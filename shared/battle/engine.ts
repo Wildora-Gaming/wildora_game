@@ -91,8 +91,11 @@ export function healFully(c: Creature) {
 }
 
 /** XP ganho ao derrotar uma criatura (×1,5 contra treinadores). */
+/** Multiplicador geral de XP (com o nível máximo em 100, o XP original era lento demais). */
+export const XP_MULTIPLIER = 3;
+
 export function xpReward(defeated: Creature, trainer = false): number {
-  const base = Math.floor((getSpecies(defeated.speciesId).baseXp * defeated.level) / 5);
+  const base = Math.floor((getSpecies(defeated.speciesId).baseXp * defeated.level * XP_MULTIPLIER) / 5);
   return trainer ? Math.floor(base * 1.5) : base;
 }
 

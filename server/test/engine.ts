@@ -141,7 +141,8 @@ test("200 batalhas aleatórias terminam e mantêm Vida coerente", () => {
 
 test("XP sobe de nível e ensina golpe novo", () => {
   const leafin = createCreature("leafin", 5);
-  assert.equal(xpReward(createCreature("pawly", 2)), 20);
+  assert.equal(xpReward(createCreature("pawly", 2)), 60); // 50 × 2 × 3 ÷ 5
+  assert.equal(xpReward(createCreature("pawly", 2), true), 90); // treinador: ×1,5
   assert.deepEqual(gainXp(leafin, 100), { levels: [6], learned: [] });
   const r = gainXp(leafin, 200);
   assert.deepEqual(r, { levels: [7], learned: ["polen_sonolento"] });

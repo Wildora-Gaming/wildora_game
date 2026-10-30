@@ -22,7 +22,7 @@ export const LEGEND_INTERVAL_MS: [number, number] = [2 * 60 * 60 * 1000, 3 * 60 
 export const LEGEND_FIRST_MS: [number, number] = [20 * 60 * 1000, 40 * 60 * 1000];
 /** Quanto tempo o lendário fica no mapa. */
 export const LEGEND_DURATION_MS = 15 * 60 * 1000;
-export const LEGEND_LEVEL: [number, number] = [45, 50];
+export const LEGEND_LEVEL: [number, number] = [60, 80];
 
 export const CHAT_MAX_LENGTH = 140;
 export const CHAT_COOLDOWN_MS = 700;
