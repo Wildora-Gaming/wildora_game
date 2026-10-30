@@ -6,7 +6,7 @@ import { effectiveness, type TypeId } from "./types";
 
 export type Rng = () => number;
 
-export const MAX_LEVEL = 60;
+export const MAX_LEVEL = 100;
 export const MAX_MOVES = 4;
 const CRIT_CHANCE = 1 / 16;
 const CRIT_MULT = 1.5;
