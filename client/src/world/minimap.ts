@@ -208,47 +208,106 @@ export function openWorldMap(getMarkers: () => MapMarkers) {
   body.append(wrap, legendBox);
   openModal("map", "Mapa de Wildora", body, { wide: true });
 
+  // tela estreita (celular em pé): mapa ampliado, arrastando com o dedo, começando em você
+  const zoomed = window.innerWidth < 700;
+  if (zoomed) {
+    wrap.classList.add("zoomed");
+    body.insertBefore(el("p", "hint", "Arraste o mapa para ver o resto do mundo."), legendBox);
+  }
+  let first = true;
   const draw = () => {
     const m = getMarkers();
-    // escala: cabe na largura disponível (no mínimo 2 px por tile)
-    const avail = Math.max(240, Math.min(wrap.clientWidth || 720, 1100)) * Math.min(2, window.devicePixelRatio || 1);
+    if (zoomed && first) canvas.style.width = `${Math.round(Math.max(560, (wrap.clientWidth || 360) * 2.1))}px`;
+    // escala: resolução do tamanho mostrado na tela (no mínimo 2 px por tile)
+    const cssWidth = zoomed ? parseFloat(canvas.style.width) : Math.min(wrap.clientWidth || 720, 1100);
+    const avail = Math.max(240, cssWidth) * Math.min(2, window.devicePixelRatio || 1);
     const s = Math.max(2, Math.ceil(avail / W));
     canvas.width = W * s;
     canvas.height = H * s;
     const ctx = canvas.getContext("2d")!;
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(baseCanvas(), 0, 0, W * s, H * s);
-    for (const o of healObjects()) drawIcon(ctx, "heal", o, s, 0, 0, Math.max(3, s * 1.6));
-    for (const o of gymObjects()) drawIcon(ctx, "gym", o, s, 0, 0, Math.max(4, s * 2.4));
-    // nomes das regiões
+    // tamanhos pensados em pixels de tela: o canvas é esticado/encolhido para caber na janela
+    // (com object-fit: contain, a imagem ocupa o menor dos dois lados)
+    const rect = canvas.getBoundingClientRect();
+    const shown = Math.max(1, Math.min(rect.width || wrap.clientWidth || canvas.width, rect.height ? (rect.height * W) / H : Infinity));
+    const k = canvas.width / shown; // pixels do canvas por pixel de tela
+    const narrow = shown < 560;
+    for (const o of healObjects()) drawIcon(ctx, "heal", o, s, 0, 0, 5 * k);
+    for (const o of gymObjects()) drawIcon(ctx, "gym", o, s, 0, 0, 7.5 * k);
+    ctx.lineJoin = "round";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const font = Math.max(10, Math.round(s * 4.2));
-    ctx.font = `700 ${font}px "Pixelify Sans", system-ui, sans-serif`;
-    ctx.lineJoin = "round";
-    for (const l of regionLabels()) {
-      ctx.lineWidth = Math.max(3, font / 4);
-      ctx.strokeStyle = "rgba(20,24,34,0.85)";
-      ctx.strokeText(l.name, l.x * s, l.y * s);
-      ctx.fillStyle = l.name === "Vila Broto" ? "#ffe066" : "#ffffff";
-      ctx.fillText(l.name, l.x * s, l.y * s);
+
+    // retângulos já ocupados (etiquetas e ícones), para os nomes não se encostarem
+    type Box = { x: number; y: number; w: number; h: number };
+    const taken: Box[] = [];
+    const hits = (r: Box) => taken.some((t) => r.x < t.x + t.w && r.x + r.w > t.x && r.y < t.y + t.h && r.y + r.h > t.y);
+    const pad = 4 * k;
+    const clampX = (cx: number, w: number) => Math.max(w / 2 + pad, Math.min(canvas.width - w / 2 - pad, cx));
+    const clampY = (cy: number, h: number) => Math.max(h / 2 + pad, Math.min(canvas.height - h / 2 - pad, cy));
+    for (const o of [...gymObjects(), ...healObjects()]) {
+      const d = doorOf(o);
+      const r = 8 * k;
+      taken.push({ x: (d.x + 0.5) * s - r, y: (d.y + 0.5) * s - r, w: r * 2, h: r * 2 });
     }
-    // nomes dos ginásios
-    ctx.font = `700 ${Math.max(9, Math.round(font * 0.72))}px "Pixelify Sans", system-ui, sans-serif`;
+
+    // ginásios: etiqueta escura com o nível (e o nome, se couber), embaixo do losango
+    const tagPx = (narrow ? 11 : 13) * k;
+    ctx.font = `700 ${tagPx}px system-ui, -apple-system, "Segoe UI", sans-serif`;
     for (const o of gymObjects()) {
       const gym = GYMS.find((g) => g.id === o.gymId);
       if (!gym) continue;
       const d = doorOf(o);
-      const label = `${gym.name.replace("Ginásio ", "")} · Nv. ${gym.level}`;
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "rgba(20,24,34,0.85)";
-      ctx.strokeText(label, (d.x + 0.5) * s, (d.y + 0.5) * s + s * 4.5);
-      ctx.fillStyle = "#ffe9b0";
-      ctx.fillText(label, (d.x + 0.5) * s, (d.y + 0.5) * s + s * 4.5);
+      const text = narrow ? `Nv. ${gym.level}` : `${gym.name.replace("Ginásio ", "")} · Nv. ${gym.level}`;
+      const w = ctx.measureText(text).width + tagPx * 0.9;
+      const h = tagPx * 1.55;
+      let cy = (d.y + 0.5) * s + 7.5 * k + h / 2 + 2 * k;
+      if (cy + h / 2 > canvas.height - pad) cy = (d.y + 0.5) * s - 7.5 * k - h / 2 - 2 * k; // sem espaço embaixo: vai em cima
+      const cx = clampX((d.x + 0.5) * s, w);
+      taken.push({ x: cx - w / 2, y: cy - h / 2, w, h });
+      ctx.fillStyle = "rgba(16,20,30,0.88)";
+      ctx.strokeStyle = TYPE_COLOR[gym.type];
+      ctx.lineWidth = 1.5 * k;
+      ctx.beginPath();
+      ctx.roundRect(cx - w / 2, cy - h / 2, w, h, h / 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(text, cx, cy + tagPx * 0.05);
     }
-    if (m.legend) drawStar(ctx, (m.legend.x + 0.5) * s, (m.legend.y + 0.5) * s, Math.max(6, s * 3));
-    for (const p of m.others) drawPlayer(ctx, (p.x + 0.5) * s, (p.y + 0.5) * s, Math.max(2, s), false);
-    if (m.me) drawPlayer(ctx, (m.me.x + 0.5) * s, (m.me.y + 0.5) * s, Math.max(4, s * 2.2), true);
+
+    // nomes das regiões: grandes, com contorno grosso, sem cobrir as etiquetas
+    const regionPx = (narrow ? 12 : 16) * k;
+    ctx.font = `700 ${regionPx}px "Wildora Digits", "Pixelify Sans", system-ui, sans-serif`;
+    for (const l of regionLabels()) {
+      const w = ctx.measureText(l.name).width + regionPx * 0.4;
+      const h = regionPx * 1.2;
+      const x0 = clampX(l.x * s, w);
+      let pos = { x: x0, y: clampY(l.y * s, h) };
+      for (const dy of [0, -1, 1, -2, 2, -3, 3, -4, 4]) {
+        const cand = { x: x0, y: clampY(l.y * s + dy * h * 0.8, h) };
+        if (!hits({ x: cand.x - w / 2, y: cand.y - h / 2, w, h })) {
+          pos = cand;
+          break;
+        }
+      }
+      taken.push({ x: pos.x - w / 2, y: pos.y - h / 2, w, h });
+      ctx.lineWidth = regionPx * 0.32;
+      ctx.strokeStyle = "rgba(16,20,30,0.92)";
+      ctx.strokeText(l.name, pos.x, pos.y);
+      ctx.fillStyle = l.name === "Vila Broto" ? "#ffe066" : "#ffffff";
+      ctx.fillText(l.name, pos.x, pos.y);
+    }
+    if (m.legend) drawStar(ctx, (m.legend.x + 0.5) * s, (m.legend.y + 0.5) * s, 9 * k);
+    for (const p of m.others) drawPlayer(ctx, (p.x + 0.5) * s, (p.y + 0.5) * s, 4 * k, false);
+    if (m.me) drawPlayer(ctx, (m.me.x + 0.5) * s, (m.me.y + 0.5) * s, 6 * k, true);
+    if (zoomed && first && m.me) {
+      const sc = shown / W; // pixels de tela por tile
+      wrap.scrollLeft = m.me.x * sc - wrap.clientWidth / 2;
+      wrap.scrollTop = m.me.y * sc - wrap.clientHeight / 2;
+    }
+    first = false;
 
     legendBox.replaceChildren();
     const item = (cls: string, text: string) => {

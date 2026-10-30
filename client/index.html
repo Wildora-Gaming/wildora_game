@@ -10,6 +10,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet" />
     <style>
+      /* Algarismos de uma fonte clara (Nunito): na fonte pixelada o 5 parecia um S. */
+      @font-face { font-family: "Wildora Digits"; src: url("/fonts/digits-800.woff2") format("woff2");
+        unicode-range: U+0030-0039; font-weight: 100 900; font-display: swap; }
       :root {
         --bg: #14161c;
         --panel: rgba(16, 18, 24, 0.82);
@@ -17,7 +20,7 @@
         --text: #e9ecf2;
         --muted: #9aa3b2;
         --accent: #ffc914;
-        --pixel: "Pixelify Sans", system-ui, sans-serif;
+        --pixel: "Wildora Digits", "Pixelify Sans", system-ui, sans-serif;
       }
       * { box-sizing: border-box; }
       button { touch-action: manipulation; }

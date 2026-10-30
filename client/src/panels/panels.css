@@ -122,3 +122,7 @@
 .wm-key.gym { background: #e8692f; transform: rotate(45deg) scale(0.85); }
 .wm-key.heal { background: linear-gradient(#e5484d, #e5484d) center / 4px 100% no-repeat, linear-gradient(#e5484d, #e5484d) center / 100% 4px no-repeat, #fff; }
 .wm-key.star { background: #ffd84a; clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); border: 0; width: 16px; height: 16px; }
+
+/* celular: mapa ampliado com rolagem */
+.world-map-canvas.zoomed { overflow: auto; max-height: calc(100dvh - 230px); touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
+.world-map-canvas.zoomed canvas { max-width: none; max-height: none; object-fit: fill; }

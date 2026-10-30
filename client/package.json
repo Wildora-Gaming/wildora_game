@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource/nunito": "^5.3.0",
     "@supabase/supabase-js": "^2.118.0",
     "colyseus.js": "^0.16.22",
     "phaser": "^3.90.0"

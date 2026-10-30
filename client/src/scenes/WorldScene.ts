@@ -179,7 +179,7 @@ export class WorldScene extends Phaser.Scene {
     const sprite = this.add.sprite(x, y, key, frameIndex("down", "stand")).setOrigin(0.5, 1).setDepth(y);
     const label = this.add
       .text(x, y - 26, o.name ?? "", {
-        fontFamily: '"Pixelify Sans", system-ui, sans-serif',
+        fontFamily: '"Wildora Digits", "Pixelify Sans", system-ui, sans-serif',
         fontSize: "14px",
         color: "#ffd84a",
         stroke: "#1f1a24",
@@ -422,7 +422,7 @@ export class WorldScene extends Phaser.Scene {
       const img = this.add.image(0, -2, key).setOrigin(0.5, 1);
       const label = this.add
         .text(0, -img.height - 6, sp.name, {
-          fontFamily: '"Pixelify Sans", system-ui, sans-serif',
+          fontFamily: '"Wildora Digits", "Pixelify Sans", system-ui, sans-serif',
           fontSize: "15px",
           color: "#ffd84a",
           stroke: "#1f1a24",
@@ -516,7 +516,7 @@ export class WorldScene extends Phaser.Scene {
     // Texto desenhado em tamanho de tela e reduzido pelo zoom: fica nítido.
     const label = this.add
       .text(0, -26, player.name, {
-        fontFamily: '"Pixelify Sans", system-ui, sans-serif',
+        fontFamily: '"Wildora Digits", "Pixelify Sans", system-ui, sans-serif',
         fontSize: "15px",
         color: isMe ? "#ffe066" : "#ffffff",
         stroke: "#1f1a24",
