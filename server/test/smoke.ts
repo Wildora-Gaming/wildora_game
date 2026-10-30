@@ -310,8 +310,7 @@ async function main() {
   {
     // time forte para atravessar o ginásio rápido (acesso direto à sessão do servidor)
     const session = (room as any).sessions.get(a.sessionId);
-    session.trainer.team.unshift(createCreature("flamberus", 15)); // no limite do ginásio (nível 10 + 5)
-    for (const c of session.trainer.team) c.level = Math.min(c.level, 15);
+    session.trainer.team.unshift(createCreature("flamberus", 60));
     const gymObj = MAP_OBJECTS.find((o) => o.kind === "gym" && o.gymId === "fera")!;
     const door = doorOf(gymObj);
     room.rng = () => 0.99;

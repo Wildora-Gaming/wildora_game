@@ -320,7 +320,7 @@ function buildWorld() {
     place("npc", door.x + 2, door.y + 1, 0, true, { gymId: gym.id, look: gym.leader.look, name: gym.leader.name });
     place("house", x + 9, y + 1, 0, true, { role: "heal" });
     place("sign", x - 2, y + 3, 0, true, {
-      text: `${gym.name}: ${gym.badge}. Nível ${gym.level}; só entram criaturas até o nível ${gym.level + 5}. Ao lado, um Posto de Cura.`,
+      text: `${gym.name}: ${gym.badge}. Nível ${gym.level}. Ao lado, um Posto de Cura.`,
     });
     gymDoors[gym.id] = { x: door.x, y: y + 5 };
   }

@@ -10,9 +10,9 @@ import { WorldRoom } from "../src/rooms/WorldRoom";
 import { FileStore } from "../src/store/file-store";
 import { ROOM_NAME } from "../../shared/constants";
 import { MAP_OBJECTS, doorOf } from "../../shared/map";
-import { isValidAction, startBattle, createCreature, xpForLevel } from "../../shared/battle/engine";
+import { isValidAction, startBattle, createCreature, xpForLevel, gainXp } from "../../shared/battle/engine";
 import { candyChance } from "../../shared/items";
-import { GYMS, gymLevelCap } from "../../shared/gyms";
+import { GYMS } from "../../shared/gyms";
 
 const PORT = 2603;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -96,16 +96,19 @@ async function main() {
   assert.equal(candyChance(20), 0.1);
   ok("vencer criatura selvagem pode dar um Doce Estelar (5%, ou 10% a partir do nível 20)");
 
-  // ginásio com limite de nível: criaturas acima ficam de fora
-  const gym = GYMS[0];
-  const gymObj = MAP_OBJECTS.find((o) => o.kind === "gym" && o.gymId === gym.id)!;
-  const gp = world.state.players.get(room.sessionId)!;
-  gp.x = doorOf(gymObj).x;
-  gp.y = doorOf(gymObj).y + 1;
-  room.send("gym_challenge", { gymId: gym.id });
-  await waitFor(() => inbox.notice.some((n) => new RegExp(`só entram criaturas até o nível ${gymLevelCap(gym)}. Guarde na caixa: Flamber \\(Nv. 17\\)`).test(n.text)), "limite do ginásio");
-  assert.equal(session.battle, null);
-  ok("ginásio recusa criaturas acima do limite de nível e diz quais guardar");
+  // ginásios: dois para iniciantes e os outros de 50 a 100; times evoluídos no nível
+  assert.deepEqual(GYMS.map((g) => g.level), [25, 35, 50, 60, 70, 80, 90, 100]);
+  const top = GYMS.at(-1)!.leader.team;
+  assert.ok(top.every(([, lvl]) => lvl >= 98 && lvl <= 100), "líder do último ginásio perto do 100");
+  assert.ok(GYMS.find((g) => g.id === "flora")!.leader.team.some(([sp]) => sp === "leafaurus" || sp === "leafox"));
+  // nível máximo: 100, e 150 para lendários
+  const comum = createCreature("pawly", 99);
+  gainXp(comum, 10 ** 8);
+  assert.equal(comum.level, 100);
+  const lenda = createCreature("solvaris", 99);
+  gainXp(lenda, 10 ** 8);
+  assert.equal(lenda.level, 150);
+  ok("ginásios de 25 a 100 com times evoluídos; nível máximo 100 (lendários 150)");
 
   // ---------- Casa do Treinador ----------
   const tutor = MAP_OBJECTS.find((o) => o.role === "tutor")!;

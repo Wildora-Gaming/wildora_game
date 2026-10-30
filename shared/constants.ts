@@ -129,8 +129,6 @@ export interface GymOfferMessage {
   type: string;
   badge: string;
   level: number;
-  /** criaturas acima deste nível não entram */
-  maxLevel: number;
   leader: string;
   quote: string;
   trainers: number;

@@ -1,6 +1,7 @@
 // Ginásios: um de cada tipo, cada um com dois treinadores e o líder.
 // O desafio é em sequência, sem curar entre as lutas. Vencer o líder dá a insígnia.
 import type { TypeId } from "./battle/types";
+import { SPECIES } from "./battle/data";
 
 export interface GymTrainer {
   name: string;
@@ -39,11 +40,35 @@ const leader = (name: string, look: string, team: [string, number][]): GymTraine
   reward: 100 * Math.max(...team.map(([, lvl]) => lvl)),
 });
 
-/** Nível máximo das criaturas que entram no ginásio: 5 acima do nível dele. */
-export const GYM_LEVEL_MARGIN = 5;
-export const gymLevelCap = (gym: Gym) => gym.level + GYM_LEVEL_MARGIN;
+/** Forma que a espécie teria nesse nível (segue as evoluções). */
+function evolvedAt(speciesId: string, level: number): string {
+  let id = speciesId;
+  for (let evo = SPECIES[id]?.evolvesTo; evo && level >= evo.level; evo = SPECIES[id]?.evolvesTo) id = evo.species;
+  return id;
+}
 
-export const GYMS: Gym[] = [
+/**
+ * Nível de cada ginásio: dois para quem está começando e os outros de 50 a 100.
+ * Os times foram montados para o nível antigo; sobem a mesma diferença e evoluem.
+ */
+const GYM_LEVELS: Record<string, number> = {
+  fera: 25, flora: 35, mare: 50, faisca: 60, pedra: 70, vento: 80, brasa: 90, espectro: 100,
+};
+function rescale(g: Gym): Gym {
+  const to = GYM_LEVELS[g.id] ?? g.level;
+  const d = to - g.level;
+  const up = (tr: GymTrainer, isLeader: boolean): GymTrainer => {
+    const team = tr.team.map(([sp, lvl]): [string, number] => {
+      const level = Math.max(1, Math.min(100, lvl + d));
+      return [evolvedAt(sp, level), level];
+    });
+    const top = Math.max(...team.map(([, lvl]) => lvl));
+    return { ...tr, team, reward: (isLeader ? 100 : 40) * top };
+  };
+  return { ...g, level: to, trainers: g.trainers.map((tr) => up(tr, false)), leader: up(g.leader, true) };
+}
+
+const BASE_GYMS: Gym[] = [
   {
     id: "fera",
     name: "Ginásio Garra",
@@ -157,6 +182,8 @@ export const GYMS: Gym[] = [
     prize: { orbi_ouro: 2, super_pocao: 3, doce_estelar: 1 },
   },
 ];
+
+export const GYMS: Gym[] = BASE_GYMS.map(rescale);
 
 export function getGym(id: unknown): Gym | undefined {
   return GYMS.find((g) => g.id === id);

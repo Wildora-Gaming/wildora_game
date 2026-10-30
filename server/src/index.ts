@@ -17,7 +17,9 @@ checkConfig();
 // ---------- Armazenamento e login ----------
 let store: Store;
 if (config.databaseUrl) {
-  store = new PgStore(connectPostgres(config.databaseUrl));
+  const pg = new PgStore(connectPostgres(config.databaseUrl));
+  await pg.migrate();
+  store = pg;
 } else {
   const file = new FileStore(config.dataFile);
   store = file;

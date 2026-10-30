@@ -62,13 +62,20 @@ async function main() {
     create table auth.users (id uuid primary key);
     create function auth.uid() returns uuid language sql as $$ select null::uuid $$;
   `);
-  await pg.exec(readFileSync(resolve(here, "../../supabase/schema.sql"), "utf8"));
-  await pg.exec(readFileSync(resolve(here, "../../supabase/schema.sql"), "utf8")); // rodar de novo não quebra
+  const schema = readFileSync(resolve(here, "../../supabase/schema.sql"), "utf8");
+  // banco criado antes do limite de 150: o servidor ajusta sozinho ao iniciar (PgStore.migrate)
+  await pg.exec(schema.replace("level between 1 and 150", "level between 1 and 100"));
+  await pg.exec(schema); // rodar de novo não quebra
   for (const u of Object.values(USERS)) await pg.query("insert into auth.users (id) values ($1)", [u.id]);
   ok("schema.sql roda no Postgres (e pode rodar de novo)");
 
   const db = pgliteDb(pg);
   const store = new PgStore(db, 100);
+  await store.migrate();
+  await store.migrate(); // repetir não quebra
+  const check = await pg.query<{ def: string }>("select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'creatures_level_check'");
+  assert.match(check.rows[0].def, /150/);
+  ok("banco antigo passa a aceitar lendários até o nível 150");
 
   // ---------- ida e volta direto no armazenamento ----------
   const sample: Trainer = {

@@ -7,6 +7,10 @@ import { effectiveness, type TypeId } from "./types";
 export type Rng = () => number;
 
 export const MAX_LEVEL = 100;
+/** Os lendários vão mais longe. */
+export const LEGEND_MAX_LEVEL = 150;
+export const LEGENDARIES: ReadonlySet<string> = new Set(["solvaris", "nocteon", "abyssion", "terralith"]);
+export const maxLevelOf = (speciesId: string) => (LEGENDARIES.has(speciesId) ? LEGEND_MAX_LEVEL : MAX_LEVEL);
 export const MAX_MOVES = 4;
 const CRIT_CHANCE = 1 / 16;
 const CRIT_MULT = 1.5;
@@ -101,7 +105,7 @@ export interface XpResult {
 export function gainXp(c: Creature, amount: number): XpResult {
   const result: XpResult = { levels: [], learned: [] };
   c.xp += amount;
-  while (c.level < MAX_LEVEL && c.xp >= xpForLevel(c.level + 1)) {
+  while (c.level < maxLevelOf(c.speciesId) && c.xp >= xpForLevel(c.level + 1)) {
     const before = calcStats(c).maxHp;
     c.level += 1;
     c.hp += calcStats(c).maxHp - before;
@@ -591,7 +595,7 @@ export function toView(c: Creature, withMoves = true): CreatureView {
     hp: c.hp,
     maxHp: calcStats(c).maxHp,
     status: c.status,
-    xpProgress: c.level >= MAX_LEVEL ? 1 : Math.min(1, Math.max(0, (c.xp - floor) / (next - floor))),
+    xpProgress: c.level >= maxLevelOf(c.speciesId) ? 1 : Math.min(1, Math.max(0, (c.xp - floor) / (next - floor))),
     moves: withMoves
       ? c.moves.map((id) => {
           const m = getMove(id);

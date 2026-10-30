@@ -58,6 +58,7 @@ com `?toque=1` no endereço.
   mochila, Sementes, Criaturopédia e insígnias. Cada criatura guarda quem a capturou e onde.
 - **Criador de personagem** com prévia ao vivo: pele, 7 cabelos, 4 olhos, 4 roupas, 3 partes de
   baixo, 3 chapéus e paletas de cor. Os outros jogadores veem o seu visual.
+- **Nível máximo 100** (lendários até 150).
 - **3 iniciais** (Leafin, Flambo, Aquari) e **89 criaturas** em 43 linhas evolutivas, incluindo
   4 lendários.
 - **Mundo 256×192** com a Vila Broto no centro e 8 biomas grandes, com bordas irregulares que se
@@ -78,8 +79,8 @@ com `?toque=1` no endereço.
 - **Time de até 6** e caixa ilimitada; ordem do time e líder configuráveis.
 - **8 ginásios** (um de cada tipo) espalhados pelos biomas, cada um com um Posto de Cura ao lado; os
   mais fortes ficam mais longe da vila. Em cada um você
-  enfrenta 2 treinadores e o líder em sequência, sem curar no meio. Só entram criaturas até 5 níveis
-  acima do nível do ginásio. Vencer o líder dá a insígnia
+  enfrenta 2 treinadores e o líder em sequência, sem curar no meio. Níveis 25 e 35 para quem está
+  começando e depois 50, 60, 70, 80, 90 e 100; os times usam a forma evoluída das criaturas. Vencer o líder dá a insígnia
   e itens; treinadores trocam de criatura e escolhem golpes com estratégia.
 - **Batalha amistosa entre jogadores**: desafie quem estiver perto; os dois escolhem golpe ou troca
   e o turno resolve com as duas escolhas. As criaturas lutam com Vida cheia e ninguém perde nada.

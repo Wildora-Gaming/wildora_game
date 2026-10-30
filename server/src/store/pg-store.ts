@@ -45,6 +45,19 @@ export class PgStore extends BatchedStore {
     super(delayMs);
   }
 
+  /**
+   * Ajustes no esquema de bancos criados antes (rodam a cada início e podem repetir).
+   * - criaturas: nível até 150 (lendários).
+   */
+  async migrate() {
+    try {
+      await this.db.query(`alter table public.creatures drop constraint if exists creatures_level_check`);
+      await this.db.query(`alter table public.creatures add constraint creatures_level_check check (level between 1 and 150)`);
+    } catch (err) {
+      console.error("[store] não consegui atualizar o limite de nível no banco (rode supabase/schema.sql):", err);
+    }
+  }
+
   async count() {
     const r = await this.db.query<{ n: number | string }>("select count(*)::int as n from public.trainers");
     return Number(r.rows[0]?.n ?? 0);

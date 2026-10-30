@@ -28,7 +28,7 @@ create table if not exists public.creatures (
   id            text primary key,
   owner_id      uuid not null references public.trainers (id) on delete cascade,
   species_id    text not null,
-  level         integer not null check (level between 1 and 100),
+  level         integer not null check (level between 1 and 150), -- lendários vão até 150
   xp            integer not null default 0,
   hp            integer not null default 0,
   status        text,

@@ -53,7 +53,7 @@ import {
 } from "../../../shared/battle/pvp";
 import { HEAL_POINT, LEGEND_SPOTS, SPAWN, WORLD_VERSION, doorOf, isWalkable, isWildTile, objectAt, tileAt } from "../../../shared/map";
 import { rollWild, zoneAt } from "../../../shared/creatures";
-import { getGym, gymLevelCap, gymStages, type Gym } from "../../../shared/gyms";
+import { getGym, gymStages, type Gym } from "../../../shared/gyms";
 import { tutorOption } from "../../../shared/tutor";
 import { TYPE_LABEL } from "../../../shared/battle/types";
 import { sanitizeLook } from "../../../shared/avatar/look";
@@ -69,7 +69,7 @@ import {
   evolveIfReady,
   gainXp,
   healFully,
-  MAX_LEVEL,
+  maxLevelOf,
   MAX_MOVES,
   xpForLevel,
   isValidAction,
@@ -719,7 +719,6 @@ export class WorldRoom extends Room<WorldState> {
       type: TYPE_LABEL[gym.type],
       badge: gym.badge,
       level: gym.level,
-      maxLevel: gymLevelCap(gym),
       leader: gym.leader.name,
       quote: gym.quote,
       trainers: gym.trainers.length,
@@ -742,12 +741,6 @@ export class WorldRoom extends Room<WorldState> {
     });
     if (!near) return;
     if (!s.trainer.team.some((c) => c.hp > 0)) return this.notice(client, "Seu time precisa se recuperar no Centro de Cura antes.");
-    const cap = gymLevelCap(gym);
-    const over = s.trainer.team.filter((c) => c.level > cap);
-    if (over.length) {
-      const names = over.map((c) => `${getSpecies(c.speciesId).name} (Nv. ${c.level})`).join(", ");
-      return this.notice(client, `No ${gym.name} só entram criaturas até o nível ${cap}. Guarde na caixa: ${names}.`);
-    }
     s.gymRun = { gymId: gym.id, stage: 0 };
     this.beginTrainerBattle(client, player, s, gym, 0);
   }
@@ -919,7 +912,7 @@ export class WorldRoom extends Room<WorldState> {
   /** Doce Estelar: sobe 1 nível na hora (golpes novos e evolução incluídos). */
   private useLevelItem(client: Client, t: Trainer, c: Creature, itemId: string) {
     const before = getSpecies(c.speciesId).name;
-    if (c.level >= MAX_LEVEL) return this.notice(client, `${before} já está no nível máximo.`);
+    if (c.level >= maxLevelOf(c.speciesId)) return this.notice(client, `${before} já está no nível máximo.`);
     if (c.hp <= 0) return this.notice(client, `${before} está desmaiado. Cure no Centro de Cura antes.`);
     const { levels, learned } = gainXp(c, xpForLevel(c.level + 1) - c.xp);
     const evo = evolveIfReady(c);
