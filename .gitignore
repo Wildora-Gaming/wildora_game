@@ -7,3 +7,6 @@ __pycache__
 deploy/oracle/.env
 deploy/oracle/certs/*
 !deploy/oracle/certs/LEIA-ME.txt
+deploy/oracle/backups/
+deploy/oracle/.update_pending
+deploy/oracle/.update_announced

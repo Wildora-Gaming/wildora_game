@@ -87,6 +87,28 @@ function serve(req: IncomingMessage, res: ServerResponse) {
     res.end(publicConfig);
     return;
   }
+  // Só para a própria máquina (update.sh roda "docker compose exec"): quantos online e aviso de reinício.
+  if (url.startsWith("/internal/")) {
+    const ip = req.socket.remoteAddress ?? "";
+    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip)) {
+      res.writeHead(404).end();
+      return;
+    }
+    if (url === "/internal/status") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ online: WorldRoom.onlineCount() }));
+      return;
+    }
+    const m = /^\/internal\/announce-restart\/(\d{1,2})$/.exec(url);
+    if (m) {
+      WorldRoom.announceAll(`O servidor vai reiniciar em ${m[1]} minutos para uma atualização. Seu progresso fica salvo.`);
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("ok");
+      return;
+    }
+    res.writeHead(404).end();
+    return;
+  }
   if (url === "/healthz") {
     res.writeHead(200, { "content-type": "text/plain" });
     res.end("ok");

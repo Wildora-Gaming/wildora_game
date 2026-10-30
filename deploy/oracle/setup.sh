@@ -9,7 +9,8 @@
 #   3. libera as portas 80 e 443 no firewall interno da VM (a Oracle bloqueia por padrão)
 #   4. instala o Docker
 #   5. baixa o projeto em ~/wildora_game e cria deploy/oracle/.env para você preencher
-#   6. agenda a atualização automática (a cada 5 minutos confere se há versão nova)
+#   6. agenda a atualização automática (a cada 5 minutos confere se há versão nova; só reinicia com
+#      ninguém online ou depois de avisar no chat) e o backup diário do banco (01:17)
 set -euo pipefail
 
 REPO=https://github.com/Wildora-Gaming/wildora_game.git
@@ -52,15 +53,16 @@ else
   git clone --quiet "$REPO" "$DIR"
 fi
 cd "$DIR/deploy/oracle"
-chmod +x update.sh setup.sh
+chmod +x update.sh setup.sh backup.sh
 if [ ! -f .env ]; then
   cp .env.example .env
 fi
 chmod 600 .env
 
-say "6/6 Atualização automática (cron, a cada 5 minutos)"
+say "6/6 Atualização automática (a cada 5 minutos) e backup diário (01:17)"
 CRON="*/5 * * * * $DIR/deploy/oracle/update.sh >> $HOME/wildora-update.log 2>&1"
-( crontab -l 2>/dev/null | grep -v 'deploy/oracle/update.sh' ; echo "$CRON" ) | crontab -
+BACKUP="17 4 * * * $DIR/deploy/oracle/backup.sh >> $HOME/wildora-backup.log 2>&1"
+( crontab -l 2>/dev/null | grep -v 'deploy/oracle/update.sh' | grep -v 'deploy/oracle/backup.sh' ; echo "$CRON" ; echo "$BACKUP" ) | crontab -
 
 cat <<MSG
 

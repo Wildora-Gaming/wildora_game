@@ -251,10 +251,20 @@ export class WorldRoom extends Room<WorldState> {
 
   /** Permite injetar RNG determinístico nos testes. */
   rng: () => number = Math.random;
+
+  /** Salas abertas neste processo (para avisos do servidor). */
+  private static rooms = new Set<WorldRoom>();
+  static onlineCount() {
+    return ONLINE.size;
+  }
+  static announceAll(text: string) {
+    for (const r of WorldRoom.rooms) r.broadcastSystem(text);
+  }
   /** Relógio do dia/noite. WILDORA_TIME_OFFSET (ms) adianta o relógio para testar a noite. */
   now: () => number = () => Date.now() + Number(process.env.WILDORA_TIME_OFFSET ?? 0);
 
   onCreate() {
+    WorldRoom.rooms.add(this);
     this.setState(new WorldState());
     this.state.night = isNightAt(this.now());
     this.clock.setInterval(() => {
@@ -435,6 +445,7 @@ export class WorldRoom extends Room<WorldState> {
   }
 
   onDispose() {
+    WorldRoom.rooms.delete(this);
     void this.store?.flush();
   }
 
