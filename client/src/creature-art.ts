@@ -90,3 +90,43 @@ export function creatureArt(speciesId: string, name: string, types: TypeId[], op
   box.append(canvas);
   return box;
 }
+
+const miniCache = new Map<string, HTMLCanvasElement>();
+
+/**
+ * Versão pequena da arte para andar no mapa atrás do treinador: reduzida com suavização
+ * e depois "endurecida" (transparência tudo-ou-nada) para continuar com cara de pixel art.
+ */
+export function miniCanvas(speciesId: string, types: TypeId[], height: number): HTMLCanvasElement {
+  const key = `${speciesId}:${height}`;
+  const hit = miniCache.get(key);
+  if (hit) return hit;
+  const src = nativeCanvas(speciesId, types);
+  const scale = Math.min(1, height / src.height);
+  const w = Math.max(1, Math.round(src.width * scale));
+  const h = Math.max(1, Math.round(src.height * scale));
+  const out = document.createElement("canvas");
+  out.width = w;
+  out.height = h;
+  const ctx = out.getContext("2d")!;
+  // reduz em etapas (metade por vez) para não perder detalhe
+  let cur: HTMLCanvasElement = src;
+  while (cur.width / 2 > w && cur.height / 2 > h) {
+    const half = document.createElement("canvas");
+    half.width = Math.ceil(cur.width / 2);
+    half.height = Math.ceil(cur.height / 2);
+    const hc = half.getContext("2d")!;
+    hc.imageSmoothingEnabled = true;
+    hc.imageSmoothingQuality = "high";
+    hc.drawImage(cur, 0, 0, half.width, half.height);
+    cur = half;
+  }
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(cur, 0, 0, w, h);
+  const img = ctx.getImageData(0, 0, w, h);
+  for (let i = 3; i < img.data.length; i += 4) img.data[i] = img.data[i] >= 110 ? 255 : 0;
+  ctx.putImageData(img, 0, 0);
+  miniCache.set(key, out);
+  return out;
+}

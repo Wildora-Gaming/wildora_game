@@ -16,6 +16,8 @@ export class Player extends Schema {
   declare look: string;
   /** último pedido de movimento processado (o cliente usa para confirmar a previsão) */
   declare seq: number;
+  /** espécie da primeira criatura do time (anda atrás do treinador) */
+  declare pet: string;
 
   constructor() {
     super();
@@ -27,6 +29,7 @@ export class Player extends Schema {
     this.inBattle = false;
     this.look = "";
     this.seq = 0;
+    this.pet = "";
   }
 
   static create(name: string, x: number, y: number, color: number) {
@@ -47,6 +50,7 @@ defineTypes(Player, {
   inBattle: "boolean",
   look: "string",
   seq: "uint32",
+  pet: "string",
 });
 
 /** Lendário no mapa durante o evento (speciesId vazio = nenhum). */

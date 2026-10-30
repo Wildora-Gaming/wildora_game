@@ -3,7 +3,7 @@ import { getStateCallbacks, type Room } from "colyseus.js";
 import { MOVE_COOLDOWN_MS, TILE_SIZE, DIRECTION_DELTA, type ChatBroadcast, type Direction } from "../../../shared/constants";
 import { LEGEND_SPOTS, MAP_HEIGHT, MAP_OBJECTS, MAP_WIDTH, Tile, isWalkable, isWildTile, tileAt } from "../../../shared/map";
 import { SPECIES } from "../../../shared/battle/data";
-import { nativeCanvas } from "../creature-art";
+import { miniCanvas, nativeCanvas } from "../creature-art";
 import { inputBlocked } from "../ui-state";
 import { openBagPanel, openTeamPanel } from "../panels/panels";
 import { areaName } from "../../../shared/creatures";
@@ -50,6 +50,17 @@ interface Mover {
   idleSince: number;
   /** jogadores remotos: próximos tiles a percorrer */
   queue: { x: number; y: number }[];
+  /** criatura líder do time andando atrás (um tile de atraso) */
+  pet: Pet;
+}
+
+interface Pet {
+  img: Phaser.GameObjects.Image | null;
+  species: string;
+  tx: number;
+  ty: number;
+  fromX: number;
+  fromY: number;
 }
 
 const px = (t: number) => t * TILE_SIZE + TILE_SIZE / 2;
@@ -203,17 +214,28 @@ export class WorldScene extends Phaser.Scene {
     m.progress += ms / STEP_MS;
     if (m.progress < 1) {
       m.body.setPosition(m.fromX + (px(m.tx) - m.fromX) * m.progress, m.fromY + (py(m.ty) - m.fromY) * m.progress);
+      this.placePet(m, m.progress);
       return 0;
     }
     const left = (m.progress - 1) * STEP_MS;
     m.moving = false;
     m.progress = 0;
     m.body.setPosition(px(m.tx), py(m.ty));
+    this.placePet(m, 1);
     this.arrived(m);
     return left;
   }
 
   private startStep(m: Mover, x: number, y: number, dir: Direction, carry: number) {
+    // a criatura vai para onde o treinador estava
+    const pet = m.pet;
+    if (pet.img) {
+      pet.fromX = pet.img.x;
+      pet.fromY = pet.img.y;
+      if (px(m.tx) !== pet.fromX) pet.img.setFlipX(px(m.tx) > pet.fromX);
+    }
+    pet.tx = m.tx;
+    pet.ty = m.ty;
     m.fromX = m.body.x;
     m.fromY = m.body.y;
     m.tx = x;
@@ -324,7 +346,43 @@ export class WorldScene extends Phaser.Scene {
     m.body.setPosition(px(x), py(y));
     m.sprite.stop();
     m.sprite.setFrame(frameIndex(m.dir, "stand"));
+    // a criatura aparece logo atrás, se der
+    const { dx, dy } = DIRECTION_DELTA[m.dir];
+    const bx = isWalkable(x - dx, y - dy) ? x - dx : x;
+    const by = isWalkable(x - dx, y - dy) ? y - dy : y;
+    m.pet.tx = bx;
+    m.pet.ty = by;
+    m.pet.fromX = px(bx);
+    m.pet.fromY = py(by);
+    this.placePet(m, 1);
     this.arrived(m);
+  }
+
+  /** Posição da criatura que segue (t = andamento do passo, 0 a 1), com um pulinho ao andar. */
+  private placePet(m: Mover, t: number) {
+    const pet = m.pet;
+    if (!pet.img) return;
+    const x = pet.fromX + (px(pet.tx) - pet.fromX) * t;
+    const y = pet.fromY + (py(pet.ty) - pet.fromY) * t;
+    const hop = t < 1 && (pet.fromX !== px(pet.tx) || pet.fromY !== py(pet.ty)) ? Math.sin(t * Math.PI) * 2 : 0;
+    pet.img.setPosition(Math.round(x), Math.round(y - hop));
+    pet.img.setDepth(y - 0.5);
+  }
+
+  /** Troca a criatura que segue o treinador (líder do time mudou). */
+  private syncPet(m: Mover, species: string) {
+    const pet = m.pet;
+    if (species === pet.species) return;
+    pet.species = species;
+    pet.img?.destroy();
+    pet.img = null;
+    const sp = SPECIES[species];
+    if (!sp) return;
+    const legend = (sp.catchRate ?? 1) <= 0.03;
+    const key = `mini-${species}`;
+    if (!this.textures.exists(key)) this.textures.addCanvas(key, miniCanvas(species, sp.types, legend ? 32 : 22));
+    pet.img = this.add.image(pet.fromX || px(pet.tx), pet.fromY || py(pet.ty), key).setOrigin(0.5, 1);
+    this.placePet(m, 1);
   }
 
   // ---------- Rede ----------
@@ -337,6 +395,7 @@ export class WorldScene extends Phaser.Scene {
       const isMe = sessionId === this.room.sessionId;
       const m = this.createMover(player, isMe, sessionId);
       this.movers.set(sessionId, m);
+      this.syncPet(m, player.pet ?? "");
       if (isMe) {
         this.me = m;
         this.seq = player.seq ?? 0;
@@ -347,7 +406,9 @@ export class WorldScene extends Phaser.Scene {
     });
 
     $(this.room.state).players.onRemove((_player: any, sessionId: string) => {
-      this.movers.get(sessionId)?.body.destroy();
+      const gone = this.movers.get(sessionId);
+      gone?.body.destroy();
+      gone?.pet.img?.destroy();
       this.movers.delete(sessionId);
       if (online) online.textContent = String(this.room.state.players.size);
     });
@@ -446,6 +507,7 @@ export class WorldScene extends Phaser.Scene {
 
   private syncLook(m: Mover, player: any) {
     m.battleIcon.setVisible(Boolean(player.inBattle));
+    this.syncPet(m, player.pet ?? "");
     if (player.look) {
       const key = ensureAvatar(this, player.look);
       if (key !== m.textureKey) {
@@ -564,6 +626,7 @@ export class WorldScene extends Phaser.Scene {
       progress: 0,
       idleSince: 0,
       queue: [],
+      pet: { img: null, species: "", tx: player.x, ty: player.y, fromX: px(player.x), fromY: py(player.y) },
     };
   }
 

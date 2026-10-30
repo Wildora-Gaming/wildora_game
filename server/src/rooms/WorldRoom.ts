@@ -413,6 +413,8 @@ export class WorldRoom extends Room<WorldState> {
     const s = this.sessions.get(client.sessionId);
     if (!s) return;
     const t = s.trainer;
+    const player = this.state.players.get(client.sessionId);
+    if (player) player.pet = t.team[0]?.speciesId ?? "";
     const msg: ProfileMessage = {
       name: t.name,
       money: t.money,
