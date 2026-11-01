@@ -265,6 +265,7 @@ async function main() {
     USERS["token-ana-0000000000000000"].id,
   ]);
   assert.deepEqual(inv.rows.map((r) => [r.item_id, r.qty]), [
+    ["fruta_serena", 2],
     ["orbi", 2],
     ["pocao", 3],
   ]);

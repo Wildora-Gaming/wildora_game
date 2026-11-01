@@ -12,6 +12,7 @@ import { TEAM_MAX, type GymOfferMessage, type ProfileMessage, type ShopMessage }
 import { GYMS } from "../../../shared/gyms";
 import { creatureSellPrice, itemSellPrice } from "../../../shared/economy";
 import type { CreatureView } from "../../../shared/battle/engine";
+import { maxLevelOf } from "../../../shared/battle/engine";
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text?: string) {
   const node = document.createElement(tag);
@@ -300,7 +301,7 @@ export function openBagPanel(room: Room) {
       const targets = el("div", "c-list");
       const levelItem = getItem(choosing)?.kind === "level";
       p.team.forEach((c, i) => {
-        const full = levelItem ? c.level >= 60 || c.hp <= 0 : c.hp >= c.maxHp || c.hp <= 0;
+        const full = levelItem ? c.level >= maxLevelOf(c.speciesId) || c.hp <= 0 : c.hp >= c.maxHp || c.hp <= 0;
         targets.append(
           creatureRow(c, [btn("Usar aqui", () => { room.send("use_item", { itemId: choosing, target: i }); choosing = null; }, "", full)], true),
         );

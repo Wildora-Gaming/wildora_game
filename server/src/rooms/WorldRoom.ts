@@ -69,7 +69,7 @@ import { MERCHANT, MERCHANT_SPOTS, NPCS, dayNumber, getNpc, roadReward, type Npc
 import { TYPE_LABEL } from "../../../shared/battle/types";
 import { sanitizeLook } from "../../../shared/avatar/look";
 import { STARTERS, STARTER_LEVEL, getMove, getSpecies, isSpeciesId } from "../../../shared/battle/data";
-import { SHOP_ITEMS, candyChance, STARTING_BAG, STARTING_MONEY, getItem, moneyReward } from "../../../shared/items";
+import { FRUIT_DROP_CHANCE, SHOP_ITEMS, candyChance, STARTING_BAG, STARTING_MONEY, getItem, moneyReward } from "../../../shared/items";
 import {
   activeOf,
   awardExperience,
@@ -645,6 +645,10 @@ export class WorldRoom extends Room<WorldState> {
         if (this.rng() < candyChance(battle.foe.level)) {
           t.bag.doce_estelar = (t.bag.doce_estelar ?? 0) + 1;
           events.push({ t: "found", itemId: "doce_estelar" });
+        }
+        if (this.rng() < FRUIT_DROP_CHANCE) {
+          t.bag.fruta_serena = (t.bag.fruta_serena ?? 0) + 1;
+          events.push({ t: "found", itemId: "fruta_serena" });
         }
       }
       events.push(end);
@@ -1413,7 +1417,7 @@ export class WorldRoom extends Room<WorldState> {
     const item = getItem(m?.itemId);
     const t = r.s.trainer;
     const target = Number(m?.target);
-    if (!item || item.kind === "orb" || (t.bag[item.id] ?? 0) <= 0) return;
+    if (!item || item.kind === "orb" || item.kind === "calm" || (t.bag[item.id] ?? 0) <= 0) return;
     if (!Number.isInteger(target) || target < 0 || target >= t.team.length) return;
     const c = t.team[target];
     if (item.kind === "level") return this.useLevelItem(client, t, c, item.id);

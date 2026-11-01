@@ -213,7 +213,7 @@ function linha2(
   const ls = learn(moves);
   return {
     [id]: species(id, name, types, base, 70, 0.4, ls, { species: id2, level: 32 }),
-    [id2]: species(id2, name2, types2, add(base, 28), 220, 0.08, ls),
+    [id2]: species(id2, name2, types2, add(base, 28), 220, 0.12, ls),
   };
 }
 
@@ -225,8 +225,8 @@ function linha3(
   const ls = learn(moves);
   return {
     [ids[0]]: species(ids[0], names[0], types, base, 62, 0.45, ls, { species: ids[1], level: 16 }),
-    [ids[1]]: species(ids[1], names[1], types, add(base, 16), 140, 0.2, ls, { species: ids[2], level: 32 }),
-    [ids[2]]: species(ids[2], names[2], finalTypes, add(base, 34), 235, 0.06, ls),
+    [ids[1]]: species(ids[1], names[1], types, add(base, 16), 140, 0.25, ls, { species: ids[2], level: 32 }),
+    [ids[2]]: species(ids[2], names[2], finalTypes, add(base, 34), 235, 0.1, ls),
   };
 }
 

@@ -45,6 +45,8 @@
 .info-level { font-size: clamp(13px, 1.8vw, 17px); }
 .status-badge { font-size: 11px; font-weight: 700; color: #fff; background: #7b5ea7; border-radius: 4px;
   padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
+.calm-badge { font-size: 11px; font-weight: 700; color: #fff; background: #3fa66b; border-radius: 4px;
+  padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
 .status-badge[data-s="queimado"] { background: #e8692f; }
 .status-badge[data-s="paralisado"] { background: #c9a227; }
 .status-badge[data-s="adormecido"] { background: #6b7280; }

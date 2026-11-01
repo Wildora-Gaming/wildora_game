@@ -55,7 +55,7 @@ export const NPCS: Npc[] = [
     x: 122, y: 104, face: "right", role: "quest",
     hello: "Eu estudo as criaturas de Wildora e preciso de ajuda em campo.",
     quests: [
-      { ask: "Capture 3 criaturas, de qualquer tipo.", task: { kind: "catch", count: 3 }, reward: { money: 300, items: { orbi_prata: 3 } }, thanks: "Ótimo começo! Leve estes Orbis Prata." },
+      { ask: "Capture 3 criaturas, de qualquer tipo.", task: { kind: "catch", count: 3 }, reward: { money: 300, items: { orbi_prata: 3, fruta_serena: 3 } }, thanks: "Ótimo começo! Leve estes Orbis Prata e umas Frutas Serenas." },
       { ask: "Vença 10 criaturas selvagens.", task: { kind: "win", count: 10 }, reward: { money: 500, items: { super_pocao: 2 } }, thanks: "Seu time está ficando forte. Tome, para as próximas batalhas." },
       { ask: "Capture um Frostitt na Planície Gelada, ao norte.", task: { kind: "catch", count: 1, species: "frostitt" }, reward: { money: 1000, items: { doce_estelar: 1 } }, thanks: "Um Frostitt! Que pelagem incrível. Aqui está um Doce Estelar." },
       { ask: "Vença 3 treinadores na estrada.", task: { kind: "road", count: 3 }, reward: { money: 2000, items: { orbi_ouro: 1 } }, thanks: "Já ouvi falar de você pelas estradas! Este Orbi Ouro é seu." },
@@ -95,7 +95,7 @@ export const NPCS: Npc[] = [
     hello: "O mar anda agitado. Preciso de treinadores corajosos na costa.",
     quests: [
       { ask: "Vença 10 criaturas na Costa dos Recifes.", task: { kind: "win", count: 10, zone: "Costa dos Recifes" }, reward: { items: { hiper_pocao: 3 } }, thanks: "A praia ficou mais calma. Leve estas Hiper Poções." },
-      { ask: "Capture uma Slitheria.", task: { kind: "catch", count: 1, species: "slitheria" }, reward: { items: { orbi_ouro: 1 } }, thanks: "Que bela Slitheria! Um Orbi Ouro para você." },
+      { ask: "Capture uma Slitheria.", task: { kind: "catch", count: 1, species: "slitheria" }, reward: { items: { orbi_ouro: 1, fruta_dourada: 1 } }, thanks: "Que bela Slitheria! Um Orbi Ouro e uma Fruta Dourada para você." },
       { ask: "Capture 5 criaturas na Costa dos Recifes.", task: { kind: "catch", count: 5, zone: "Costa dos Recifes" }, reward: { money: 3000, items: { doce_estelar: 1 } }, thanks: "Você conhece este mar como ninguém." },
     ],
   },

@@ -74,6 +74,8 @@ export function describeEvent(e: BattleEvent, names: BattleNames, wild = true): 
       return `${names.trainer ?? "O adversário"} mandou ${e.view.name}!`;
     case "heal":
       return `${e.amount > 0 ? `Recuperou ${e.amount} de Vida.` : "Não teve efeito."}`;
+    case "fruit":
+      return `${who("foe")} comeu ${getItem(e.itemId)?.name ?? "a fruta"} e ficou calmo. Mais fácil de capturar!`;
     case "throw":
       return `Você lançou ${getItem(e.itemId)?.name ?? "um Orbi"}!`;
     case "shake":

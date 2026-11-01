@@ -6,7 +6,7 @@ import { sound } from "../audio/audio";
 import { creatureArt } from "../creature-art";
 import { itemIcon } from "../items-art";
 import { uiState } from "../ui-state";
-import { STATUS_LABEL } from "../../../shared/battle/data";
+import { SPECIES, STATUS_LABEL } from "../../../shared/battle/data";
 import { TYPE_COLOR, TYPE_LABEL } from "../../../shared/battle/types";
 import { describeEvent, type BattleNames } from "../../../shared/battle/text";
 import { getItem } from "../../../shared/items";
@@ -45,6 +45,7 @@ export class BattleUI {
   private trainer: BattleStartMessage["trainer"];
   private foeCount = 1;
   private foeLeft = 1;
+  private foeCalm = 1;
   private foeBalls!: HTMLElement;
   private needSwitch = false;
   private orb: HTMLElement | null = null;
@@ -95,6 +96,7 @@ export class BattleUI {
     this.foeCount = msg.foeCount ?? 1;
     this.foeLeft = this.foeCount;
     this.needSwitch = false;
+    this.foeCalm = 1;
     this.bag = uiState.profile?.bag ?? {};
 
     this.root.replaceChildren();
@@ -216,6 +218,10 @@ export class BattleUI {
     v.hpFill.classList.toggle("mid", pct <= 50 && pct > 20);
     v.hpFill.classList.toggle("low", pct <= 20);
     if (v.hpNumbers) v.hpNumbers.textContent = `${hp}/${maxHp}`;
+    if (side === "foe" && this.foe) {
+      this.foe.hp = hp;
+      this.foe.maxHp = maxHp;
+    }
   }
 
   private setStatus(side: Side, status: string | null) {
@@ -223,6 +229,24 @@ export class BattleUI {
     badge.hidden = !status;
     badge.dataset.s = status ?? "";
     badge.textContent = status ? STATUS_LABEL[status as keyof typeof STATUS_LABEL] : "";
+    if (side === "foe" && this.foe) this.foe.status = (status as CreatureView["status"]) ?? null;
+  }
+
+  /** Mostra (ou esconde) a marca "Calmo" da criatura selvagem. */
+  private setCalm(calm: number) {
+    this.foeCalm = calm;
+    const info = this.sides.foe.name.parentElement;
+    info?.querySelector(".calm-badge")?.remove();
+    if (calm > 1 && info) info.append(el("span", "calm-badge", "Calmo"));
+  }
+
+  /** Estimativa da chance de captura com um orbe (mesma conta do servidor). */
+  private catchEstimate(orbPower: number) {
+    const f = this.foe;
+    const rate = SPECIES[f.speciesId]?.catchRate ?? 0;
+    const status = f.status === "adormecido" ? 2 : f.status === "paralisado" || f.status === "assustado" ? 1.5 : 1;
+    const p = (1 - (2 / 3) * (f.hp / Math.max(1, f.maxHp))) * rate * orbPower * status * this.foeCalm;
+    return Math.round(Math.min(1, Math.max(0, p)) * 100);
   }
 
   // ---------- Menus ----------
@@ -268,10 +292,13 @@ export class BattleUI {
     const buttons = entries.map(([id, n]) => {
       const item = getItem(id)!;
       const isOrb = item.kind === "orb";
-      const full = !isOrb && this.player.hp >= this.player.maxHp;
-      const b = button(`${item.name} ×${n}`, "item", () => this.act({ kind: "item", itemId: id }), (isOrb && !this.wild) || full);
+      const isFruit = item.kind === "calm";
+      const full = item.kind === "heal" && this.player.hp >= this.player.maxHp;
+      const calmEnough = isFruit && this.foeCalm >= item.power;
+      const label = isOrb && this.wild ? `${item.name} ×${n} · ~${this.catchEstimate(item.power)}%` : `${item.name} ×${n}`;
+      const b = button(label, "item", () => this.act({ kind: "item", itemId: id }), ((isOrb || isFruit) && !this.wild) || full || calmEnough);
       b.prepend(itemIcon(id, 22));
-      b.title = item.description;
+      b.title = calmEnough ? "A criatura já está calma." : isOrb && this.wild ? `${item.description} Chance estimada agora: ${this.catchEstimate(item.power)}%.` : item.description;
       return b;
     });
     this.actions.replaceChildren(...buttons, button("Voltar", "back", () => this.showMainMenu()));
@@ -367,6 +394,10 @@ export class BattleUI {
       case "wake":
       case "calm":
         this.setStatus(e.side, null);
+        break;
+      case "fruit":
+        this.setCalm(e.calm);
+        sound.sfx("buy");
         break;
       case "switch":
         this.active = e.index;

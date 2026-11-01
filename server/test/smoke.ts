@@ -134,7 +134,7 @@ async function main() {
   assert.equal(pa.team[0].speciesId, "flambo");
   assert.equal(pa.team[0].level, 5);
   assert.equal(pa.money, 500);
-  assert.deepEqual(pa.bag, { orbi: 5, pocao: 3 });
+  assert.deepEqual(pa.bag, { orbi: 5, pocao: 3, fruta_serena: 2 });
   assert.equal(ib.profile[0].team[0].speciesId, "leafin", "inicial inválido cai no padrão");
   ok("perfil inicial: criatura, 500 Sementes, 5 Orbis e 3 Poções");
 

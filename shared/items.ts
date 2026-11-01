@@ -1,6 +1,6 @@
 // Itens da mochila.
 
-export type ItemKind = "orb" | "heal" | "level";
+export type ItemKind = "orb" | "heal" | "level" | "calm";
 
 export interface ItemDef {
   id: string;
@@ -9,7 +9,7 @@ export interface ItemDef {
   description: string;
   /** preço na loja em Sementes; null = não vende */
   price: number | null;
-  /** orb: bônus de captura · heal: Vida recuperada · level: níveis ganhos */
+  /** orb: bônus de captura · heal: Vida recuperada · level: níveis ganhos · calm: bônus de captura enquanto calma */
   power: number;
 }
 
@@ -48,6 +48,22 @@ export const ITEMS: Record<string, ItemDef> = {
     price: null,
     power: 200,
   },
+  fruta_serena: {
+    id: "fruta_serena",
+    name: "Fruta Serena",
+    kind: "calm",
+    description: "Oferece à criatura selvagem: ela para para comer e fica calma (captura ×2,5).",
+    price: 250,
+    power: 2.5,
+  },
+  fruta_dourada: {
+    id: "fruta_dourada",
+    name: "Fruta Dourada",
+    kind: "calm",
+    description: "Fruta rara: a criatura selvagem fica bem calma (captura ×4). Só com o Mercador ou em recompensas.",
+    price: null,
+    power: 4,
+  },
   doce_estelar: {
     id: "doce_estelar",
     name: "Doce Estelar",
@@ -58,9 +74,9 @@ export const ITEMS: Record<string, ItemDef> = {
   },
 };
 
-export const SHOP_ITEMS = ["orbi", "orbi_prata", "pocao", "super_pocao", "doce_estelar"];
+export const SHOP_ITEMS = ["orbi", "orbi_prata", "fruta_serena", "pocao", "super_pocao", "doce_estelar"];
 
-export const STARTING_BAG: Record<string, number> = { orbi: 5, pocao: 3 };
+export const STARTING_BAG: Record<string, number> = { orbi: 5, pocao: 3, fruta_serena: 2 };
 export const STARTING_MONEY = 500;
 
 export function getItem(id: unknown): ItemDef | null {
@@ -75,4 +91,12 @@ export function candyChance(level: number) {
 /** Sementes ganhas ao vencer uma criatura. */
 export function moneyReward(level: number) {
   return 20 + level * 8;
+}
+
+/** Chance de achar uma Fruta Serena ao vencer uma criatura selvagem. */
+export const FRUIT_DROP_CHANCE = 0.08;
+
+/** Lendários são ariscos: a fruta rende só metade do bônus. */
+export function calmPower(power: number, legendary: boolean) {
+  return legendary ? 1 + (power - 1) / 2 : power;
 }

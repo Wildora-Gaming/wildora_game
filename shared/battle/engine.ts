@@ -1,7 +1,7 @@
 // Motor de batalha puro: sem rede, sem relógio, RNG injetado.
 // O servidor é o único que chama resolveTurn; o cliente só anima os eventos.
 import { getMove, getSpecies, type StatusId } from "./data";
-import { getItem } from "../items";
+import { calmPower, getItem } from "../items";
 import { effectiveness, type TypeId } from "./types";
 
 export type Rng = () => number;
@@ -165,6 +165,8 @@ export interface BattleState {
   needSwitch: boolean;
   /** uids das criaturas do jogador que entraram em campo (dividem o XP) */
   participants: string[];
+  /** bônus de captura da fruta oferecida à criatura selvagem (1 = sem fruta) */
+  foeCalm?: number;
 }
 
 export type BattleEvent =
@@ -183,6 +185,7 @@ export type BattleEvent =
   | { t: "foe_switch"; view: CreatureView; left: number }
   | { t: "heal"; index: number; itemId: string; amount: number; hp: number; maxHp: number }
   | { t: "throw"; itemId: string }
+  | { t: "fruit"; itemId: string; calm: number }
   | { t: "shake"; count: number }
   | { t: "caught"; speciesId: string }
   | { t: "escape" }
@@ -241,6 +244,7 @@ export function isValidAction(state: BattleState, action: unknown): action is Ac
       const item = getItem(a.itemId);
       if (!item) return false;
       if (item.kind === "orb") return state.wild;
+      if (item.kind === "calm") return state.wild && (state.foeCalm ?? 1) < calmPower(item.power, LEGENDARIES.has(state.foe.speciesId));
       if (item.kind !== "heal") return false; // Doce Estelar só fora de batalha
       const target = a.target === undefined ? state.active : a.target;
       if (!isIndex(target, state.team.length)) return false;
@@ -314,10 +318,10 @@ export function calcDamage(
 }
 
 /** Chance de captura (ver "Captura" no documento de design). */
-export function catchChance(foe: Creature, orbPower: number): number {
+export function catchChance(foe: Creature, orbPower: number, calm = 1): number {
   const max = calcStats(foe).maxHp;
   const statusBonus = foe.status === "adormecido" ? 2 : foe.status === "paralisado" || foe.status === "assustado" ? 1.5 : 1;
-  const p = (1 - (2 / 3) * (foe.hp / max)) * getSpecies(foe.speciesId).catchRate * orbPower * statusBonus;
+  const p = (1 - (2 / 3) * (foe.hp / max)) * getSpecies(foe.speciesId).catchRate * orbPower * statusBonus * calm;
   return Math.min(1, Math.max(0, p));
 }
 
@@ -409,9 +413,14 @@ export function resolveTurn(state: BattleState, playerAction: Action, foeAction:
         const before = c.hp;
         c.hp = Math.min(max, c.hp + item.power);
         events.push({ t: "heal", index, itemId: item.id, amount: c.hp - before, hp: c.hp, maxHp: max });
+      } else if (item.kind === "calm") {
+        // a criatura para para comer: fica calma e não ataca neste turno
+        state.foeCalm = calmPower(item.power, LEGENDARIES.has(state.foe.speciesId));
+        events.push({ t: "fruit", itemId: item.id, calm: state.foeCalm });
+        break;
       } else {
         events.push({ t: "throw", itemId: item.id });
-        const caught = rng() < catchChance(state.foe, item.power);
+        const caught = rng() < catchChance(state.foe, item.power, state.foeCalm ?? 1);
         events.push({ t: "shake", count: caught ? 3 : Math.floor(rng() * 3) });
         if (caught) {
           events.push({ t: "caught", speciesId: state.foe.speciesId });

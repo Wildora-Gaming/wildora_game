@@ -263,6 +263,31 @@ test("treinador esperto escolhe o golpe super efetivo", () => {
   assert.equal(foe.moves[a.moveIndex], "onda");
 });
 
+test("Fruta Serena acalma: inimigo não ataca e a captura fica mais fácil", () => {
+  const foe = createCreature("lobravo", 60);
+  const hero = createCreature("leafin", 60);
+  const state = startBattle([hero], foe);
+  const before = catchChance(foe, 1, state.foeCalm ?? 1);
+  const hp = hero.hp;
+  const events = resolveTurn(state, { kind: "item", itemId: "fruta_serena" }, { kind: "move", moveIndex: 0 }, () => 0.5);
+  assert.ok(events.some((e) => e.t === "fruit"));
+  assert.ok(!events.some((e) => e.t === "use" && e.side === "foe"), "comendo, não ataca");
+  assert.equal(hero.hp, hp);
+  assert.equal(state.foeCalm, 2.5);
+  assert.ok(Math.abs(catchChance(foe, 1, state.foeCalm) - before * 2.5) < 1e-9);
+  assert.ok(events.every((e) => describeEvent(e, { player: "A", foe: "B" }, true) !== undefined));
+  // a mesma fruta de novo não vale; a dourada ainda vale
+  assert.equal(isValidAction(state, { kind: "item", itemId: "fruta_serena" }), false);
+  assert.equal(isValidAction(state, { kind: "item", itemId: "fruta_dourada" }), true);
+  // contra treinador, não
+  const duel = startBattle([createCreature("leafin", 5)], [createCreature("pawly", 5)], false);
+  assert.equal(isValidAction(duel, { kind: "item", itemId: "fruta_serena" }), false);
+  // lendário: metade do bônus
+  const legend = startBattle([createCreature("leafin", 60)], createCreature("solvaris", 70));
+  resolveTurn(legend, { kind: "item", itemId: "fruta_serena" }, { kind: "move", moveIndex: 0 }, () => 0.5);
+  assert.equal(legend.foeCalm, 1.75);
+});
+
 test("evolução só acontece no fim da batalha", () => {
   const hero = createCreature("leafin", 15);
   hero.xp = 16 ** 3 - 1;

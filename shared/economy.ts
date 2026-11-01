@@ -38,6 +38,7 @@ export const MERCHANT_STOCK: { itemId: string; price: number }[] = [
   { itemId: "hiper_pocao", price: 1200 },
   { itemId: "doce_estelar", price: 1100 },
   { itemId: "super_pocao", price: 380 },
+  { itemId: "fruta_dourada", price: 900 },
 ];
 /** De quanto em quanto tempo o Mercador muda de lugar. */
 export const MERCHANT_STAY_MS = 30 * 60 * 1000;
