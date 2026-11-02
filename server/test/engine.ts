@@ -19,6 +19,9 @@ import {
   type BattleEvent,
 } from "../../shared/battle/engine";
 import { describeEvent } from "../../shared/battle/text";
+import { ZONES, rollWildAt } from "../../shared/creatures";
+import { NPCS } from "../../shared/npcs";
+import { MAP_HEIGHT, MAP_WIDTH, isWildTile, tileAt } from "../../shared/map";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -286,6 +289,21 @@ test("Fruta Serena acalma: inimigo não ataca e a captura fica mais fácil", () 
   const legend = startBattle([createCreature("leafin", 60)], createCreature("solvaris", 70));
   resolveTurn(legend, { kind: "item", itemId: "fruta_serena" }, { kind: "move", moveIndex: 0 }, () => 0.5);
   assert.equal(legend.foeCalm, 1.75);
+});
+
+test("toda espécie da grama alta (e de missão) aparece na forma base em algum lugar", () => {
+  const found = new Set<string>();
+  let seed = 3;
+  const rng = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let y = 0; y < MAP_HEIGHT; y += 2)
+    for (let x = 0; x < MAP_WIDTH; x += 2) {
+      if (!isWildTile(tileAt(x, y))) continue;
+      for (let k = 0; k < 4; k++) found.add(rollWildAt(x, y, rng, k % 2 === 1).speciesId);
+    }
+  const wanted = new Set(Object.values(ZONES).flatMap((z) => z.table.map((e) => e.speciesId)));
+  for (const npc of NPCS) for (const q of npc.quests ?? []) if ("species" in q.task && q.task.species) wanted.add(q.task.species);
+  const missing = [...wanted].filter((id) => !found.has(id));
+  assert.deepEqual(missing, []);
 });
 
 test("evolução só acontece no fim da batalha", () => {

@@ -1,5 +1,5 @@
 import { biomeAt, inVillage, nearLake } from "./map";
-import { evolvedAt } from "./battle/data";
+import { SPECIES, evolvedAt } from "./battle/data";
 // Criaturas selvagens por zona. Cada campina de grama alta pertence a uma zona.
 
 export interface WildEntry {
@@ -111,7 +111,19 @@ export function rollWildAt(x: number, y: number, rng: () => number = Math.random
   const zone = zoneAt(x, y);
   const { entry, level } = rollWild(zone.table, rng, isNight);
   const lvl = Math.min(100, level + levelBonus(x, y));
-  return { zone, entry, level: lvl, speciesId: evolvedAt(entry.speciesId, lvl) };
+  // na natureza a evolução vem um pouco depois; e às vezes aparece um filhote (uma forma antes)
+  let speciesId = evolvedAt(entry.speciesId, lvl - WILD_EVO_DELAY);
+  if (speciesId !== entry.speciesId && rng() < YOUNG_CHANCE) speciesId = previousForm(speciesId) ?? speciesId;
+  return { zone, entry, level: lvl, speciesId };
+}
+
+/** Selvagens só aparecem evoluídas alguns níveis depois do nível de evolução. */
+export const WILD_EVO_DELAY = 10;
+/** Chance de uma forma evoluída aparecer ainda como a forma anterior. */
+export const YOUNG_CHANCE = 0.2;
+
+function previousForm(id: string): string | undefined {
+  return Object.keys(SPECIES).find((k) => SPECIES[k].evolvesTo?.species === id);
 }
 
 /** Nome da região para mostrar ao jogador. */
