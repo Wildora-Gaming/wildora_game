@@ -1,4 +1,5 @@
 // Símbolos dos tipos (7x7 pixels, desenho original do Wildora).
+import "./type-icons.css";
 import { TYPE_COLOR, TYPE_LABEL, type TypeId } from "../../shared/battle/types";
 
 const ICONS: Record<TypeId, string[]> = {

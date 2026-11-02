@@ -155,17 +155,15 @@ export class BattleUI {
     const status = el("span", "status-badge");
     nameWrap.append(name, status);
     const level = el("span", "info-level", `Nv. ${c.level}`);
-    const types = el("span", "info-types");
-    for (const t of c.types) types.append(typeIcon(t, 20));
-    const right = el("span", "info-right");
-    right.append(types, level);
-    head.append(nameWrap, right);
+    head.append(nameWrap, level);
 
     const hpRow = el("div", "hp-row");
     const track = el("div", "hp-track");
     const hpFill = el("div", "hp-fill");
     track.append(hpFill);
-    hpRow.append(el("span", "hp-label", "HP"), track);
+    const types = el("span", "info-types");
+    for (const t of c.types) types.append(typeIcon(t, 16));
+    hpRow.append(types, el("span", "hp-label", "HP"), track);
     info.append(head, hpRow);
 
     const view: SideView = { fighter, name, level, status, hpFill };
