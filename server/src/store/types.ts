@@ -37,6 +37,8 @@ export interface Progress {
   visited?: string[];
   /** amigos (id e nome) */
   friends?: { id: string; name: string }[];
+  /** presentes únicos já entregues (id do presente) */
+  gifts?: string[];
 }
 
 /** Linha do ranking. */

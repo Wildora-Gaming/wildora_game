@@ -13,6 +13,7 @@ import { GYMS } from "../../../shared/gyms";
 import { creatureSellPrice, itemSellPrice } from "../../../shared/economy";
 import type { CreatureView } from "../../../shared/battle/engine";
 import { maxLevelOf } from "../../../shared/battle/engine";
+import { typeChip } from "../type-icons";
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text?: string) {
   const node = document.createElement(tag);
@@ -110,9 +111,7 @@ export function creatureRow(c: CreatureView, actions: HTMLElement[] = [], compac
   const top = el("div", "c-top");
   top.append(el("strong", "", c.name), el("span", "c-lvl", `Nv. ${c.level}`));
   for (const t of c.types) {
-    const tag = el("span", "c-type", TYPE_LABEL[t]);
-    tag.style.background = TYPE_COLOR[t];
-    top.append(tag);
+    top.append(typeChip(t));
   }
   if (c.status) top.append(el("span", "c-status", STATUS_LABEL[c.status]));
   info.append(top);

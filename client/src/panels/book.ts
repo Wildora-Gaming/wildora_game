@@ -3,6 +3,7 @@
 import { btn, el, openModal } from "./panels";
 import { uiState } from "../ui-state";
 import { creatureArt } from "../creature-art";
+import { typeChip } from "../type-icons";
 import { SPECIES } from "../../../shared/battle/data";
 import { TYPE_COLOR, TYPE_LABEL } from "../../../shared/battle/types";
 import { ZONES } from "../../../shared/creatures";
@@ -108,9 +109,7 @@ export function openBook() {
     if (st !== "unseen") {
       const types = el("div", "book-types");
       for (const t of sp.types) {
-        const chip = el("span", "c-type", TYPE_LABEL[t]);
-        chip.style.background = TYPE_COLOR[t];
-        types.append(chip);
+        types.append(typeChip(t));
       }
       info.append(types);
     }

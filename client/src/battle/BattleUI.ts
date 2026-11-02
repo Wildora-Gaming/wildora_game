@@ -5,6 +5,7 @@ import "./battle.css";
 import { sound } from "../audio/audio";
 import { creatureArt } from "../creature-art";
 import { itemIcon } from "../items-art";
+import { typeIcon } from "../type-icons";
 import { uiState } from "../ui-state";
 import { SPECIES, STATUS_LABEL } from "../../../shared/battle/data";
 import { TYPE_COLOR, TYPE_LABEL } from "../../../shared/battle/types";
@@ -154,7 +155,11 @@ export class BattleUI {
     const status = el("span", "status-badge");
     nameWrap.append(name, status);
     const level = el("span", "info-level", `Nv. ${c.level}`);
-    head.append(nameWrap, level);
+    const types = el("span", "info-types");
+    for (const t of c.types) types.append(typeIcon(t, 20));
+    const right = el("span", "info-right");
+    right.append(types, level);
+    head.append(nameWrap, right);
 
     const hpRow = el("div", "hp-row");
     const track = el("div", "hp-track");
@@ -279,6 +284,7 @@ export class BattleUI {
       b.style.background = TYPE_COLOR[m.type];
       const info = document.createElement("small");
       info.textContent = `${TYPE_LABEL[m.type]} · ${m.power ?? "estado"} · ${m.accuracy}%`;
+      info.prepend(typeIcon(m.type, 14));
       b.append(info);
       return b;
     });

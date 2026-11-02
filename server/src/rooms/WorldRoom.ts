@@ -70,6 +70,11 @@ import { TYPE_LABEL } from "../../../shared/battle/types";
 import { sanitizeLook } from "../../../shared/avatar/look";
 import { STARTERS, STARTER_LEVEL, getMove, getSpecies, isSpeciesId } from "../../../shared/battle/data";
 import { FRUIT_DROP_CHANCE, SHOP_ITEMS, candyChance, STARTING_BAG, STARTING_MONEY, getItem, moneyReward } from "../../../shared/items";
+
+/** Presentes para todos os treinadores (cada um recebe uma vez, no próximo login). */
+const GIFTS: { id: string; items: Record<string, number>; text: string }[] = [
+  { id: "frutas_2026_11", items: { fruta_serena: 2 }, text: "Presente: você recebeu 2 Frutas Serenas! Ofereça a uma criatura selvagem para acalmá-la antes de capturar." },
+];
 import {
   activeOf,
   awardExperience,
@@ -194,6 +199,7 @@ function newTrainer(id: string, name: string, look: unknown, starterRaw: unknown
     dir: "down",
     money: STARTING_MONEY,
     bag: { ...STARTING_BAG },
+    progress: { gifts: GIFTS.map((g) => g.id) },
     team: [first],
     box: [],
     dex: { seen: [starter], caught: [starter] },
@@ -413,7 +419,9 @@ export class WorldRoom extends Room<WorldState> {
     });
     trainer.lastSeen = Date.now();
     trainer.progress ??= {};
+    const gifts = this.giveGifts(trainer);
     this.sendProfile(client);
+    for (const text of gifts) this.notice(client, text);
     void this.marketReady.then(() => this.collectSales(trainer));
     this.broadcastSystem(`${trainer.name} chegou à Vila Broto.`);
   }
@@ -474,6 +482,20 @@ export class WorldRoom extends Room<WorldState> {
       badges: t.badges,
     };
     client.send("profile", msg);
+  }
+
+  /** Entrega presentes únicos que o treinador ainda não recebeu. */
+  private giveGifts(t: Trainer): string[] {
+    const got = (t.progress!.gifts ??= []);
+    const out: string[] = [];
+    for (const g of GIFTS) {
+      if (got.includes(g.id)) continue;
+      got.push(g.id);
+      for (const [id, n] of Object.entries(g.items)) t.bag[id] = (t.bag[id] ?? 0) + n;
+      out.push(g.text);
+    }
+    if (out.length) this.store.markDirty(t);
+    return out;
   }
 
   private notice(client: Client, text: string) {
